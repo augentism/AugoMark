@@ -258,13 +258,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         return nil
     end
 
-    -- raycast for hit unit list
     local ray_origin, forward, right, up = smart_targeting_extension:_targeting_parameters()
-    local hits, num_hits = PhysicsWorld_raycast(smart_targeting_extension._physics_world, ray_origin, forward, max_range, "all", "collision_filter", COLLISION_FILTER)
-    if num_hits <= 0 then
-        return nil
-    end
-
     local fixed_frame = smart_targeting_extension._latest_fixed_frame
     local canceled_unit = tag_context and tag_context.canceled_unit
     local breed_priorities = class_settings and class_settings.breed_priorities or EMPTY_TABLE
@@ -273,7 +267,6 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     local best_unit_tag = nil
     local best_unit_priority = -math.huge
     local best_unit_marked_by_execution_order = false
-    local best_unit_dot = -math.huge
     local best_unit_distance = math.huge
     -- init best unit for switch logic
     local marked_unit = marked_tag and marked_tag._target_unit
@@ -286,9 +279,91 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         best_unit_marked_by_execution_order = not not execution_order_units[best_unit]
     end
 
+    if type == "auto" then
+        -- omnidirectional lookup: every alive enemy in range, regardless of where the player is aiming
+        local side_system = Managers.state.extension and Managers.state.extension:system("side_system")
+        local player_side = side_system and side_system:get_side_from_name("heroes")
+        local enemy_units = player_side and player_side:relation_units("enemy")
+        if not enemy_units then
+            return nil
+        end
+
+        for i = 1, #enemy_units do
+            local hit_unit = enemy_units[i]
+            -- ignore player unit, already marked unit and dead unit
+            if hit_unit == player_unit or hit_unit == marked_unit or hit_unit == canceled_unit or not HEALTH_ALIVE[hit_unit] then
+                goto continue
+            end
+
+            local unit_data_extension = ScriptUnit_extension(hit_unit, "unit_data_system")
+            local breed_data = unit_data_extension and unit_data_extension._breed
+            -- ignore untaggable unit
+            if not breed_data or breed_data.smart_tag_target_type ~= "breed" then
+                goto continue
+            end
+
+            local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities) or 0
+            -- filter unit by type and priority
+            if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
+                goto continue
+            end
+
+            local half_height = Breed_height(hit_unit, breed_data) * 0.5
+            local hit_unit_center_pos = Unit_world_position(hit_unit, 1) + Vector3(0, 0, 1) * half_height
+            local distance = Vector3_distance(hit_unit_center_pos, ray_origin)
+            -- filter unit by range
+            if distance < min_range or distance > max_range then
+                goto continue
+            end
+
+            local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
+            -- filter unit by tag
+            if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos) then
+                goto continue
+            end
+
+            local hit_unit_marked_by_execution_order = not not execution_order_units[hit_unit]
+            if is_execution_order_priority then
+                if hit_unit_marked_by_execution_order == best_unit_marked_by_execution_order then
+                    if hit_unit_priority <= best_unit_priority then
+                        goto continue
+                    end
+                elseif best_unit_marked_by_execution_order then
+                    goto continue
+                end
+            else
+                if hit_unit_priority <= best_unit_priority then
+                    goto continue
+                end
+            end
+
+            if not is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame) then
+                goto continue
+            end
+
+            best_unit = hit_unit
+            best_unit_tag = hit_unit_tag
+            best_unit_priority = hit_unit_priority
+            best_unit_marked_by_execution_order = hit_unit_marked_by_execution_order
+
+            ::continue::
+        end
+
+        if best_unit ~= marked_unit then
+            return best_unit, best_unit_tag
+        end
+
+        return nil
+    end
+
+    -- raycast for hit unit list (focus_target_melee: pick the centered target along the crosshair ray)
+    local hits, num_hits = PhysicsWorld_raycast(smart_targeting_extension._physics_world, ray_origin, forward, max_range, "all", "collision_filter", COLLISION_FILTER)
+    if num_hits <= 0 then
+        return nil
+    end
+
     for i = 1, num_hits do
         local hit = hits[i]
-        local hit_position = hit[INDEX_POSITION]
         local hit_actor = hit[INDEX_ACTOR]
         if not hit_actor then
             goto continue
@@ -331,66 +406,18 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         end
 
         local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
-        -- filter unit by tag
-        if type == "auto" and not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos) then
+
+        if best_unit and best_unit_distance <= 3.5 and distance > 3.5 then
             goto continue
         end
 
-        if type == "auto" then
-            local hit_unit_marked_by_execution_order = not not execution_order_units[hit_unit]
-            if is_execution_order_priority then
-                if hit_unit_marked_by_execution_order == best_unit_marked_by_execution_order then
-                    if hit_unit_priority <= best_unit_priority then
-                        goto continue
-                    end
-                elseif best_unit_marked_by_execution_order then
-                    goto continue
-                end
-            else
-                if hit_unit_priority <= best_unit_priority then
-                    goto continue
-                end
-            end
-
-            if not is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame) then
-                goto continue
-            end
-
-            best_unit = hit_unit
-            best_unit_tag = hit_unit_tag
-            best_unit_priority = hit_unit_priority
-            best_unit_marked_by_execution_order = hit_unit_marked_by_execution_order
-        elseif type == "focus_target_melee" then
-            if best_unit and best_unit_distance <= 3.5 and distance > 3.5 then
-                goto continue
-            end
-
-            local hit_offset = hit_position - hit_unit_center_pos
-            local x_diff_no_abs = Vector3_dot(hit_offset, right)
-            local x_diff = math_abs(x_diff_no_abs)
-            local y_diff = math_abs(Vector3_dot(hit_offset, up))
-            if x_diff > half_width * 1.5 + 1 or y_diff > half_height + 1 then
-                goto continue
-            end
-
-            local hit_direction = Vector3_normalize(hit_unit_center_pos - ray_origin)
-            local hit_dot = Vector3_dot(forward, hit_direction)
-            if hit_dot < 0.7 or best_unit and (hit_dot <= best_unit_dot or x_diff > half_width or y_diff > half_height) then
-                goto continue
-            end
-
-            if not is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame) then
-                goto continue
-            end
-
-            best_unit = hit_unit
-            best_unit_tag = hit_unit_tag
-            best_unit_dot = hit_dot
-            best_unit_distance = distance
-            if x_diff <= half_width * 1.5 + 0.5 and y_diff <= half_height + 0.5 then
-                break
-            end
+        if not is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame) then
+            goto continue
         end
+
+        best_unit = hit_unit
+        best_unit_tag = hit_unit_tag
+        best_unit_distance = distance
 
         ::continue::
     end
