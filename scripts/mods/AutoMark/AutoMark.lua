@@ -20,33 +20,35 @@ mod.TAG_NAMES                           = TAG_NAMES
 -- Mod Settings
 ---@class AutoMarkModSettings
 local mod_settings                      = {
-    toggle_mod                              = mod:get("toggle_mod") or false,
-    toggle_mod_keybind                      = mod:get("toggle_mod_keybind") or {},
-    toggle_mod_notify                       = mod:get("toggle_mod_notify") or false,
-    debug_mode                              = mod:get("debug_mode") or false,
-    companion_mark_keybind                  = mod:get("companion_mark_keybind") or {},
-    execution_order_priority                = mod:get("execution_order_priority") or false,
-    companion_range_limitation              = mod:get("companion_range_limitation") or 0,
-    companion_cancel_mark                   = mod:get("companion_cancel_mark") or false,
-    companion_cancel_mark_human             = mod:get("companion_cancel_mark_human") or false,
-    companion_cancel_mark_non_human         = mod:get("companion_cancel_mark_non_human") or false,
-    companion_health_threshold              = mod:get("companion_health_threshold") or 0,
-    companion_time_threshold                = mod:get("companion_time_threshold") or 0,
-    servo_skull_mark_keybind                = mod:get("servo_skull_mark_keybind") or {},
-    hack_mark_keybind                       = mod:get("hack_mark_keybind") or {},
-    capacitance_retention                   = mod:get("capacitance_retention") or false,
-    capacitance_retention_elite_threshold   = mod:get("capacitance_retention_elite_threshold") or 0,
-    capacitance_retention_special_threshold = mod:get("capacitance_retention_special_threshold") or 0,
-    capacitance_retention_boss_threshold    = mod:get("capacitance_retention_boss_threshold") or 0,
-    noospheric_command_boost                = mod:get("noospheric_command_boost") or false,
-    noospheric_command_boost_elite          = mod:get("noospheric_command_boost_elite") or false,
-    noospheric_command_boost_special        = mod:get("noospheric_command_boost_special") or false,
-    noospheric_command_boost_boss           = mod:get("noospheric_command_boost_boss") or false,
-    focus_target_overwrite                  = mod:get("focus_target_overwrite") or false,
-    focus_target_overwrite_delta            = mod:get("focus_target_overwrite_delta") or 5,
-    focus_target_switch                     = mod:get("focus_target_switch") or false,
-    focus_target_switch_melee               = mod:get("focus_target_switch_melee") or false,
-    focus_target_switch_range               = mod:get("focus_target_switch_range") or false,
+    toggle_mod                               = mod:get("toggle_mod") or false,
+    toggle_mod_keybind                       = mod:get("toggle_mod_keybind") or {},
+    toggle_mod_notify                        = mod:get("toggle_mod_notify") or false,
+    debug_mode                               = mod:get("debug_mode") or false,
+    companion_mark_keybind                   = mod:get("companion_mark_keybind") or {},
+    execution_order_priority                 = mod:get("execution_order_priority") or false,
+    companion_range_limitation               = mod:get("companion_range_limitation") or 0,
+    companion_cancel_mark                    = mod:get("companion_cancel_mark") or false,
+    companion_cancel_mark_human              = mod:get("companion_cancel_mark_human") or false,
+    companion_cancel_mark_non_human          = mod:get("companion_cancel_mark_non_human") or false,
+    companion_health_threshold               = mod:get("companion_health_threshold") or 0,
+    companion_time_threshold                 = mod:get("companion_time_threshold") or 0,
+    servo_skull_mark_keybind                 = mod:get("servo_skull_mark_keybind") or {},
+    hack_mark_keybind                        = mod:get("hack_mark_keybind") or {},
+    auto_hack                                = mod:get("auto_hack") or false,
+    disable_auto_hack_for_noospheric_command = mod:get("disable_auto_hack_for_noospheric_command") or false,
+    capacitance_retention                    = mod:get("capacitance_retention") or false,
+    capacitance_retention_elite_threshold    = mod:get("capacitance_retention_elite_threshold") or 0,
+    capacitance_retention_special_threshold  = mod:get("capacitance_retention_special_threshold") or 0,
+    capacitance_retention_boss_threshold     = mod:get("capacitance_retention_boss_threshold") or 0,
+    noospheric_command_boost                 = mod:get("noospheric_command_boost") or false,
+    noospheric_command_boost_elite           = mod:get("noospheric_command_boost_elite") or false,
+    noospheric_command_boost_special         = mod:get("noospheric_command_boost_special") or false,
+    noospheric_command_boost_boss            = mod:get("noospheric_command_boost_boss") or false,
+    focus_target_overwrite                   = mod:get("focus_target_overwrite") or false,
+    focus_target_overwrite_delta             = mod:get("focus_target_overwrite_delta") or 5,
+    focus_target_switch                      = mod:get("focus_target_switch") or false,
+    focus_target_switch_melee                = mod:get("focus_target_switch_melee") or false,
+    focus_target_switch_range                = mod:get("focus_target_switch_range") or false,
 }
 mod.settings                            = mod_settings
 
@@ -190,6 +192,18 @@ local function reset_context()
     servo_skull_tag_context.noospheric_command_next_time = math.huge
 end
 
+local function destroy_references()
+    context.player                      = nil
+    context.talent_resource_component   = nil
+    context.smart_targeting_extension   = nil
+    context.companion_spawner_extension = nil
+    context.player_ability_extension    = nil
+    context.smart_tag_system            = nil
+    context.outline_system              = nil
+    context.hud_element_smart_tagging   = nil
+    mod:destroy_visibility_raycast_objects()
+end
+
 -- Load Other Files
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/utils/utils")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/context/context")
@@ -219,6 +233,7 @@ mod.on_disabled           = function(initial_call)
     context.mod_enabled = false
     -- mark info rest
     reset_context()
+    destroy_references()
 end
 
 -- Enter/Exit GameplayStateRun
@@ -314,13 +329,13 @@ local function is_tag_valid(tag_name)
     elseif tag_name == TAG_NAMES.ENEMY_TAG then
         return context.class_name ~= "veteran" or not context.has_focus_target
     elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
-        return context.class_name == "cryptic" and context.has_servo_skull and mod:can_servo_skull_shoot()
+        return context.class_name == "cryptic" and context.has_servo_skull and not mod:is_servo_skull_hacking()
     end
     return false
 end
 
 -- Auto-Mark Target Unit with the Tag
-local function auto_mark_by_tag(tag_name, t)
+local function auto_mark_by_tag(tag_name, t, fixed_frame)
     if not is_tag_valid(tag_name) then
         return false
     end
@@ -341,15 +356,18 @@ local function auto_mark_by_tag(tag_name, t)
     local is_execution_order_priority = mod_settings.execution_order_priority and tag_name == TAG_NAMES.COMPANION_TAG and context.has_execution_order
 
     local target_unit, target_tag
-    if (class_settings.override_manual or not marked_tag_is_manual) and (is_cooldown_ready or is_priority_switch or is_execution_order_priority and marked_tag) then
-        target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range,
-            tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
+    if class_settings.override_manual or not marked_tag_is_manual then
+        if is_cooldown_ready then
+            target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
+        elseif is_priority_switch or is_execution_order_priority and marked_tag then
+            target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
+        end
     end
-
     -- mark when focus target overwrite is on
     if not target_unit and mod_settings.focus_target_overwrite and tag_name == TAG_NAMES.VETERAN_TAG and marked_tag then
         local marked_unit = marked_tag._target_unit
         if mod:is_target_valid(tag_name, marked_tag, marked_unit) then
+            mod:print_debug("Focus target overwrite")
             target_unit = marked_unit
             if marked_tag_is_manual then
                 mod:on_manual_mark(tag_context, target_unit)
@@ -359,7 +377,8 @@ local function auto_mark_by_tag(tag_name, t)
 
     if not target_unit and mod_settings.noospheric_command_boost and context.has_noospheric_command and tag_name == TAG_NAMES.SERVO_SKULL_TAG and marked_tag and t >= tag_context.noospheric_command_next_time then
         local marked_unit = marked_tag._target_unit
-        if mod:is_target_valid(tag_name, nil, marked_unit) and mod:is_noospheric_command_boost_breed_valid(marked_unit) and mod:is_noospheric_command_target_visible(marked_unit) then
+        if mod:is_target_valid(tag_name, nil, marked_unit) and mod:is_noospheric_command_boost_breed_valid(marked_unit) and mod:is_servo_skull_target_visible(marked_unit, fixed_frame) then
+            mod:print_debug("Noospheric command boost")
             target_unit = marked_unit
             if marked_tag_is_manual then
                 mod:on_manual_mark(tag_context, target_unit)
@@ -371,12 +390,13 @@ local function auto_mark_by_tag(tag_name, t)
         return false
     end
 
+    mod:print_debug("Auot Mark", tag_name, target_unit)
     mod:mark(tag_name, target_unit, target_tag)
     return true
 end
 
 -- Auto-Mark
-local function auto_mark(dt, t)
+local function auto_mark(dt, t, fixed_frame)
     -- calculate interval
     if mark_context.auto_mark_interval > 0 then
         mark_context.auto_mark_interval = mark_context.auto_mark_interval - dt
@@ -407,19 +427,19 @@ local function auto_mark(dt, t)
     end
 
     -- three kinds of tag to mark
-    if auto_mark_by_tag(TAG_NAMES.COMPANION_TAG, t) then
+    if auto_mark_by_tag(TAG_NAMES.COMPANION_TAG, t, fixed_frame) then
         return
     end
 
-    if auto_mark_by_tag(TAG_NAMES.SERVO_SKULL_TAG, t) then
+    if auto_mark_by_tag(TAG_NAMES.SERVO_SKULL_TAG, t, fixed_frame) then
         return
     end
 
-    if auto_mark_by_tag(TAG_NAMES.VETERAN_TAG, t) then
+    if auto_mark_by_tag(TAG_NAMES.VETERAN_TAG, t, fixed_frame) then
         return
     end
 
-    if auto_mark_by_tag(TAG_NAMES.ENEMY_TAG, t) then
+    if auto_mark_by_tag(TAG_NAMES.ENEMY_TAG, t, fixed_frame) then
         return
     end
 end
@@ -481,9 +501,14 @@ end
 -- Main Entry For Auto Mark
 mod:hook_safe(CLASS.PlayerUnitSmartTargetingExtension, "fixed_update",
     function(self, unit, dt, t, fixed_frame)
-        if context.game_mode_valid and self._player.viewport_name == "player1" then
+        if self._player.viewport_name ~= "player1" then
+            return
+        end
+
+        if context.game_mode_valid then
             clean_visibility_cache(fixed_frame)
             cancel_companion_mark_on_condition(t)
-            auto_mark(dt, t)
+            auto_mark(dt, t, fixed_frame)
+            mod:auto_hack(dt, t, fixed_frame)
         end
     end)

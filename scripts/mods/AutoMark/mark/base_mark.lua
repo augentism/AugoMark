@@ -16,7 +16,7 @@ local ScriptUnit                  = ScriptUnit
 
 -- Delay for Server Latency, Interval for Auto Mark
 local AUTO_MARK_DELAY             = 0.5
-local AUTO_MARK_INTERVAL          = 0.333
+local AUTO_MARK_INTERVAL          = 0.25
 
 -- set delay and interval for auto mark
 local function on_set_tag(tag_context)
@@ -144,6 +144,7 @@ mod:hook_safe(CLASS.SmartTag, "init",
             return
         end
 
+        mark_context.auto_mark_interval = AUTO_MARK_INTERVAL
         -- refresh delay and set cooldown
         tag_context.tag = self
         tag_context.delay = 0
@@ -170,6 +171,8 @@ mod:hook_safe(CLASS.SmartTag, "init",
         elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
             if context.has_noospheric_command then
                 tag_context.noospheric_command_next_time = mod:get_latest_fixed_time() + noospheric_command_duration
+            else
+                tag_context.noospheric_command_next_time = math.huge
             end
         end
     end)

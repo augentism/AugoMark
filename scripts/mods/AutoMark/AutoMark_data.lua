@@ -256,6 +256,18 @@ local widgets = {
                 function_name   = "hack_mark",
             },
             {
+                setting_id    = "auto_hack",
+                type          = "checkbox",
+                default_value = false,
+                sub_widgets   = {
+                    {
+                        setting_id    = "disable_auto_hack_for_noospheric_command",
+                        type          = "checkbox",
+                        default_value = false,
+                    },
+                }
+            },
+            {
                 setting_id    = "noospheric_command_boost",
                 type          = "checkbox",
                 default_value = false,

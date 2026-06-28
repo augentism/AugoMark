@@ -61,6 +61,11 @@ function mod:init_visibility_raycast_objects()
     end
 end
 
+function mod:destroy_visibility_raycast_objects()
+    visibility_raycast_object = nil
+    servo_skull_visibility_raycast_object = nil
+end
+
 local function get_breed_priority(target_unit, breed_data, breed_priorities)
     local breed_name = breed_data and breed_data.name
     if breed_data.tags.witch then
@@ -248,6 +253,55 @@ local function is_target_visible(ray_origin, up, hit_unit_center_pos, half_heigh
     return not hit_center
 end
 
+local function is_servo_skull_target_visible(target_unit, fixed_frame)
+    if not servo_skull_visibility_raycast_object then
+        return false
+    end
+
+    local cached_visibility = servo_skull_visibility_cache[target_unit]
+    local last_check_frame = servo_skull_visibility_check_frame[target_unit]
+    if cached_visibility ~= nil and fixed_frame - last_check_frame <= 5 then
+        return cached_visibility
+    end
+
+    local companion_spawner_extension = context.companion_spawner_extension
+    local servo_skull_unit = companion_spawner_extension and companion_spawner_extension:spawned_unit_lookup(special_rules.cryptic_servo_skull_hack)
+    if not servo_skull_unit then
+        return false
+    end
+
+    local servo_skull_data_extension = ScriptUnit_extension(servo_skull_unit, "unit_data_system")
+    local servo_skull_breed_data = servo_skull_data_extension and servo_skull_data_extension._breed
+    if not servo_skull_breed_data then
+        return false
+    end
+
+    local line_of_sight_data = servo_skull_breed_data.line_of_sight_data
+    for main_index = 1, #line_of_sight_data do
+        local data = line_of_sight_data[main_index]
+        local from_node, to_node = data.from_node, data.to_node
+        local los_from_node = Unit_node(servo_skull_unit, from_node)
+        local los_to_node = Unit_node(target_unit, to_node)
+        local los_from_position = Unit_world_position(servo_skull_unit, los_from_node)
+        local los_to_position = Unit_world_position(target_unit, los_to_node)
+        local to_los_position = los_to_position - los_from_position
+        local offset_vector = to_los_position
+        local los_direction = Vector3_normalize(offset_vector)
+        local los_distance = Vector3_length(offset_vector)
+
+        local hit = Raycast_cast(servo_skull_visibility_raycast_object, los_from_position, los_direction, los_distance)
+        if hit then
+            servo_skull_visibility_cache[target_unit] = false
+            servo_skull_visibility_check_frame[target_unit] = fixed_frame
+            return false
+        end
+    end
+
+    servo_skull_visibility_cache[target_unit] = true
+    servo_skull_visibility_check_frame[target_unit] = fixed_frame
+    return true
+end
+
 function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_context, class_settings, use_filter, is_execution_order_priority, marked_tag)
     local player = context.player
     local player_unit = player and player.player_unit
@@ -352,7 +406,14 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
                 end
             end
 
-            if not is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame) then
+            local visible
+            if tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+                visible = is_servo_skull_target_visible(hit_unit, fixed_frame)
+            else
+                visible = is_target_visible(ray_origin, up, hit_unit_center_pos, half_height, hit_unit, fixed_frame)
+            end
+
+            if not visible then
                 goto continue
             end
 
@@ -406,6 +467,10 @@ function mod:is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_p
     return is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos)
 end
 
+function mod:is_servo_skull_target_visible(target_unit, fixed_frame)
+    return is_servo_skull_target_visible(target_unit, fixed_frame)
+end
+
 function mod:is_noospheric_command_boost_breed_valid(target_unit)
     local unit_data_extension = ScriptUnit_extension(target_unit, "unit_data_system")
     local breed_data = unit_data_extension and unit_data_extension._breed
@@ -435,61 +500,6 @@ function mod:is_noospheric_command_boost_breed_valid(target_unit)
     else
         return mod_settings.noospheric_command_boost_elite
     end
-end
-
-function mod:is_noospheric_command_target_visible(target_unit)
-    if not servo_skull_visibility_raycast_object then
-        return false
-    end
-
-    local smart_targeting_extension = context.smart_targeting_extension
-    if not smart_targeting_extension then
-        return false
-    end
-
-    local fixed_frame = smart_targeting_extension._latest_fixed_frame
-    local cached_visibility = servo_skull_visibility_cache[target_unit]
-    local last_check_frame = servo_skull_visibility_check_frame[target_unit]
-    if cached_visibility ~= nil and fixed_frame - last_check_frame <= 5 then
-        return cached_visibility
-    end
-
-    local companion_spawner_extension = context.companion_spawner_extension
-    local servo_skull_unit = companion_spawner_extension and companion_spawner_extension:spawned_unit_lookup(special_rules.cryptic_servo_skull_hack)
-    if not servo_skull_unit then
-        return false
-    end
-
-    local servo_skull_data_extension = ScriptUnit_extension(servo_skull_unit, "unit_data_system")
-    local servo_skull_breed_data = servo_skull_data_extension and servo_skull_data_extension._breed
-    if not servo_skull_breed_data then
-        return false
-    end
-
-    local line_of_sight_data = servo_skull_breed_data.line_of_sight_data
-    for main_index = 1, #line_of_sight_data do
-        local data = line_of_sight_data[main_index]
-        local from_node, to_node = data.from_node, data.to_node
-        local los_from_node = Unit_node(servo_skull_unit, from_node)
-        local los_to_node = Unit_node(target_unit, to_node)
-        local los_from_position = Unit_world_position(servo_skull_unit, los_from_node)
-        local los_to_position = Unit_world_position(target_unit, los_to_node)
-        local to_los_position = los_to_position - los_from_position
-        local offset_vector = to_los_position
-        local los_direction = Vector3_normalize(offset_vector)
-        local los_distance = Vector3_length(offset_vector)
-
-        local hit = Raycast_cast(servo_skull_visibility_raycast_object, los_from_position, los_direction, los_distance)
-        if hit then
-            servo_skull_visibility_cache[target_unit] = false
-            servo_skull_visibility_check_frame[target_unit] = fixed_frame
-            return false
-        end
-    end
-
-    servo_skull_visibility_cache[target_unit] = true
-    servo_skull_visibility_check_frame[target_unit] = fixed_frame
-    return true
 end
 
 mod:hook_safe(CLASS.PrecisionTargetFinder, "init",
