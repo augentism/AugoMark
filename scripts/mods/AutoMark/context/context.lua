@@ -140,6 +140,10 @@ local function init_systems()
     if outline_system then
         context.outline_system = outline_system
     end
+    local smoke_fog_system = Managers.state.extension and Managers.state.extension:system("smoke_fog_system")
+    if smoke_fog_system then
+        context.smoke_fog_system = smoke_fog_system
+    end
 end
 
 -- Track Game Settings
@@ -324,6 +328,18 @@ mod:hook_safe(CLASS.OutlineSystem, "destroy",
     function()
         mod:print_debug("Destroy OutlineSystem")
         context.outline_system = nil
+    end)
+
+mod:hook_safe(CLASS.SmokeFogSystem, "init",
+    function(self)
+        mod:print_debug("Init SmokeFogSystem")
+        context.smoke_fog_system = self
+    end)
+
+mod:hook_safe(CLASS.SmokeFogSystem, "destroy",
+    function()
+        mod:print_debug("Destroy SmokeFogSystem")
+        context.smoke_fog_system = nil
     end)
 
 -- Update settings when input settings changed

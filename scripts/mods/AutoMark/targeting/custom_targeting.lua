@@ -1,56 +1,68 @@
 ---@class AutoMarkMod:DMFMod
-local mod                                   = get_mod("AutoMark")
-local context                               = mod.context
-local mark_context                          = mod.mark_context
-local TAG_NAMES                             = mod.TAG_NAMES
-local mod_settings                          = mod.settings
-local noospheric_command_breed_settings     = mod.noospheric_command_breed_settings
-local visibility_cache                      = mod.visibility_cache
-local visibility_check_frame                = mod.visibility_check_frame
-local servo_skull_visibility_cache          = mod.servo_skull_visibility_cache
-local servo_skull_visibility_check_frame    = mod.servo_skull_visibility_check_frame
+local mod                                              = get_mod("AutoMark")
+local context                                          = mod.context
+local mark_context                                     = mod.mark_context
+local TAG_NAMES                                        = mod.TAG_NAMES
+local mod_settings                                     = mod.settings
+local noospheric_command_breed_settings                = mod.noospheric_command_breed_settings
+local visibility_cache                                 = mod.visibility_cache
+local visibility_check_frame                           = mod.visibility_check_frame
+local servo_skull_visibility_cache                     = mod.servo_skull_visibility_cache
+local servo_skull_visibility_check_frame               = mod.servo_skull_visibility_check_frame
 
 -- Imports
-local Breed                                 = require("scripts/utilities/breed")
-local MinionPerception                      = require("scripts/utilities/minion_perception")
-local SpecialRulesSettings                  = require("scripts/settings/ability/special_rules_settings")
-local Breed_height                          = Breed.height
-local special_rules                         = SpecialRulesSettings.special_rules
+local Breed                                            = require("scripts/utilities/breed")
+local SpecialRulesSettings                             = require("scripts/settings/ability/special_rules_settings")
+local Breed_height                                     = Breed.height
+local special_rules                                    = SpecialRulesSettings.special_rules
 
 -- Global Cache
-local HEALTH_ALIVE                          = HEALTH_ALIVE
-local Managers                              = Managers
-local PhysicsWorld                          = PhysicsWorld
-local Actor_unit                            = Actor.unit
-local Actor_world_bounds                    = Actor.world_bounds
-local Unit_box                              = Unit.box
-local Unit_node                             = Unit.node
-local Unit_world_position                   = Unit.world_position
-local PhysicsWorld_raycast                  = PhysicsWorld.raycast
-local Raycast_cast                          = Raycast.cast
-local ScriptUnit_extension                  = ScriptUnit.extension
-local math_abs                              = math.abs
-local math_max                              = math.max
-local Vector3_dot                           = Vector3.dot
-local Vector3_normalize                     = Vector3.normalize
-local Vector3_length                        = Vector3.length
+local CLASS                                            = CLASS
+local HEALTH_ALIVE                                     = HEALTH_ALIVE
+local Managers                                         = Managers
+local GameSession                                      = GameSession
+local PhysicsWorld                                     = PhysicsWorld
+local Actor_unit                                       = Actor.unit
+local Actor_world_bounds                               = Actor.world_bounds
+local Unit_box                                         = Unit.box
+local Unit_node                                        = Unit.node
+local Unit_world_position                              = Unit.world_position
+local PhysicsWorld_raycast                             = PhysicsWorld.raycast
+local Raycast_cast                                     = Raycast.cast
+local ScriptUnit_extension                             = ScriptUnit.extension
+local math_abs                                         = math.abs
+local math_max                                         = math.max
+local Vector3_dot                                      = Vector3.dot
+local Vector3_normalize                                = Vector3.normalize
+local Vector3_length                                   = Vector3.length
 
-local Vector3_distance                      = Vector3.distance
-local Vector3_distance_squared              = Vector3.distance_squared
-local Matrix4x4_right                       = Matrix4x4.right
-local Matrix4x4_forward                     = Matrix4x4.forward
+local Vector3_distance                                 = Vector3.distance
+local Vector3_distance_squared                         = Vector3.distance_squared
+local Matrix4x4_right                                  = Matrix4x4.right
+local Matrix4x4_forward                                = Matrix4x4.forward
 
 -- Constants
-local INDEX_POSITION                        = 1
-local INDEX_DISTANCE                        = 2
-local INDEX_NORMAL                          = 3
-local INDEX_ACTOR                           = 4
-local COLLISION_FILTER                      = "filter_player_ping_target_selection"
-local EMPTY_TABLE                           = {}
+local INDEX_POSITION                                   = 1
+local INDEX_DISTANCE                                   = 2
+local INDEX_NORMAL                                     = 3
+local INDEX_ACTOR                                      = 4
+local COLLISION_FILTER                                 = "filter_player_ping_target_selection"
+local EMPTY_TABLE                                      = {}
+
+local DARKNESS_LOS_MODIFIER_NAME                       = "mutator_darkness_los"
+local VENTILATION_PURGE_LOS_MODIFIER_NAME              = "mutator_ventilation_purge_los"
+local CIRCUMSTANCE_DETECTION_DISTANCE_LOS_REQUIREMENTS = {
+    mutator_darkness_los = 15,
+    mutator_ventilation_purge_los = 30,
+}
+
+local BUFF_KEYWORD_DISTANCE_LOS_REQUIREMENT            = {
+    concealed = 5,
+}
 
 -- Params
-local visibility_raycast_object             = nil
-local servo_skull_visibility_raycast_object = nil
+local visibility_raycast_object                        = nil
+local servo_skull_visibility_raycast_object            = nil
 
 function mod:init_visibility_raycast_objects()
     local smart_targeting_extension = context.smart_targeting_extension
@@ -66,13 +78,17 @@ function mod:destroy_visibility_raycast_objects()
     servo_skull_visibility_raycast_object = nil
 end
 
+local function is_target_aggroed(target_unit)
+    local game_session = Managers.state.game_session:game_session()
+    local game_object_id = Managers.state.unit_spawner:game_object_id(target_unit)
+    local target_unit_id = GameSession.game_object_field(game_session, game_object_id, "target_unit_id")
+    return target_unit_id ~= -1
+end
+
 local function get_breed_priority(target_unit, breed_data, breed_priorities)
     local breed_name = breed_data and breed_data.name
     if breed_data.tags.witch then
-        local game_session = Managers.state.game_session:game_session()
-        local game_object_id = Managers.state.unit_spawner:game_object_id(target_unit)
-        local is_aggroed = MinionPerception.target_unit(game_session, game_object_id)
-        if is_aggroed then
+        if is_target_aggroed(target_unit) then
             return breed_priorities[breed_name]
         else
             return breed_priorities[breed_name .. "_passive"]
@@ -109,6 +125,10 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
             return false
         end
 
+        if mod_settings.companion_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
+            return false
+        end
+
         local companion_range_limitation = mod_settings.companion_range_limitation
         if companion_range_limitation <= 0 then
             return true
@@ -121,7 +141,7 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
             return false
         end
 
-        local companion_unit_position = Unit_world_position(companion_unit, 1)
+        local companion_unit_position = POSITION_LOOKUP[companion_unit] or Unit_world_position(companion_unit, 1)
         if not companion_unit_position or not target_unit_position then
             return false
         end
@@ -170,6 +190,10 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
     elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
         local target_tag_name = target_tag and target_tag._template.name
         if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+            return false
+        end
+
+        if mod_settings.servo_skull_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
             return false
         end
 
@@ -258,6 +282,11 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
         return false
     end
 
+    local smoke_fog_system = context.smoke_fog_system
+    if not smoke_fog_system then
+        return false
+    end
+
     local cached_visibility = servo_skull_visibility_cache[target_unit]
     local last_check_frame = servo_skull_visibility_check_frame[target_unit]
     if cached_visibility ~= nil and fixed_frame - last_check_frame <= 5 then
@@ -270,6 +299,37 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
         return false
     end
 
+    local mutator_manager = Managers.state.mutator
+    local los_modifier = mutator_manager:mutator(DARKNESS_LOS_MODIFIER_NAME) and DARKNESS_LOS_MODIFIER_NAME or mutator_manager:mutator(VENTILATION_PURGE_LOS_MODIFIER_NAME) and VENTILATION_PURGE_LOS_MODIFIER_NAME
+    local detection_los_requirement
+
+    if los_modifier then
+        detection_los_requirement = CIRCUMSTANCE_DETECTION_DISTANCE_LOS_REQUIREMENTS[los_modifier]
+    end
+
+    for keyword, distance_requirement in pairs(BUFF_KEYWORD_DISTANCE_LOS_REQUIREMENT) do
+        local target_buff_extension = ScriptUnit_extension(target_unit, "buff_system")
+        if target_buff_extension and target_buff_extension:has_keyword(keyword) then
+            detection_los_requirement = distance_requirement
+        end
+    end
+
+    local servo_skull_position = POSITION_LOOKUP[servo_skull_unit] or Unit_world_position(servo_skull_unit, 1)
+    local target_position = POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1)
+    local is_within_range = not detection_los_requirement or detection_los_requirement >= Vector3_distance(servo_skull_position, target_position)
+    if not is_within_range then
+        servo_skull_visibility_cache[target_unit] = false
+        servo_skull_visibility_check_frame[target_unit] = fixed_frame
+        return false
+    end
+
+    local is_looking_trough_fog = smoke_fog_system:check_fog_los(servo_skull_position, target_position)
+    if is_looking_trough_fog then
+        servo_skull_visibility_cache[target_unit] = false
+        servo_skull_visibility_check_frame[target_unit] = fixed_frame
+        return false
+    end
+
     local servo_skull_data_extension = ScriptUnit_extension(servo_skull_unit, "unit_data_system")
     local servo_skull_breed_data = servo_skull_data_extension and servo_skull_data_extension._breed
     if not servo_skull_breed_data then
@@ -277,29 +337,20 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
     end
 
     local line_of_sight_data = servo_skull_breed_data.line_of_sight_data
-    for main_index = 1, #line_of_sight_data do
-        local data = line_of_sight_data[main_index]
-        local from_node, to_node = data.from_node, data.to_node
-        local los_from_node = Unit_node(servo_skull_unit, from_node)
-        local los_to_node = Unit_node(target_unit, to_node)
-        local los_from_position = Unit_world_position(servo_skull_unit, los_from_node)
-        local los_to_position = Unit_world_position(target_unit, los_to_node)
-        local to_los_position = los_to_position - los_from_position
-        local offset_vector = to_los_position
-        local los_direction = Vector3_normalize(offset_vector)
-        local los_distance = Vector3_length(offset_vector)
+    local first_line_of_sight_data = line_of_sight_data[1]
+    local from_node, to_node = first_line_of_sight_data.from_node, first_line_of_sight_data.to_node
+    local los_from_node = Unit_node(servo_skull_unit, from_node)
+    local los_to_node = Unit_node(target_unit, to_node)
+    local los_from_position = Unit_world_position(servo_skull_unit, los_from_node)
+    local los_to_position = Unit_world_position(target_unit, los_to_node)
+    local to_los_position = los_to_position - los_from_position
+    local los_direction = Vector3_normalize(to_los_position)
+    local los_distance = Vector3_length(to_los_position)
 
-        local hit = Raycast_cast(servo_skull_visibility_raycast_object, los_from_position, los_direction, los_distance)
-        if hit then
-            servo_skull_visibility_cache[target_unit] = false
-            servo_skull_visibility_check_frame[target_unit] = fixed_frame
-            return false
-        end
-    end
-
-    servo_skull_visibility_cache[target_unit] = true
+    local hit = Raycast_cast(servo_skull_visibility_raycast_object, los_from_position, los_direction, los_distance)
+    servo_skull_visibility_cache[target_unit] = not hit
     servo_skull_visibility_check_frame[target_unit] = fixed_frame
-    return true
+    return not hit
 end
 
 function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_context, class_settings, use_filter, is_execution_order_priority, marked_tag)
@@ -384,12 +435,6 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             goto continue
         end
 
-        local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
-        -- filter unit by tag
-        if type == "auto" and not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos) then
-            goto continue
-        end
-
         if type == "auto" then
             local hit_unit_marked_by_execution_order = not not execution_order_units[hit_unit]
             if is_execution_order_priority then
@@ -404,6 +449,11 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
                 if hit_unit_priority <= best_unit_priority then
                     goto continue
                 end
+            end
+
+            local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
+            if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos) then
+                goto continue
             end
 
             local visible
@@ -445,7 +495,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             end
 
             best_unit = hit_unit
-            best_unit_tag = hit_unit_tag
+            best_unit_tag = smart_tag_system:unit_tag(hit_unit)
             best_unit_dot = hit_dot
             best_unit_distance = distance
             if x_diff <= half_width * 1.5 + 0.5 and y_diff <= half_height + 0.5 then
@@ -478,13 +528,8 @@ function mod:is_noospheric_command_boost_breed_valid(target_unit)
         return false
     end
 
-    if breed_data.tags.witch then
-        local game_session = Managers.state.game_session:game_session()
-        local game_object_id = Managers.state.unit_spawner:game_object_id(target_unit)
-        local is_aggroed = MinionPerception.target_unit(game_session, game_object_id)
-        if not is_aggroed then
-            return false
-        end
+    if breed_data.tags.witch and not is_target_aggroed(target_unit) then
+        return false
     end
 
     local breed_name = breed_data.name
