@@ -25,6 +25,7 @@ local mod_settings                      = {
     toggle_mod_notify                        = mod:get("toggle_mod_notify") or false,
     debug_mode                               = mod:get("debug_mode") or false,
     companion_mark_keybind                   = mod:get("companion_mark_keybind") or {},
+    companion_mark_ignore_unaggroed          = mod:get("companion_mark_ignore_unaggroed") or false,
     execution_order_priority                 = mod:get("execution_order_priority") or false,
     companion_range_limitation               = mod:get("companion_range_limitation") or 0,
     companion_cancel_mark                    = mod:get("companion_cancel_mark") or false,
@@ -33,6 +34,7 @@ local mod_settings                      = {
     companion_health_threshold               = mod:get("companion_health_threshold") or 0,
     companion_time_threshold                 = mod:get("companion_time_threshold") or 0,
     servo_skull_mark_keybind                 = mod:get("servo_skull_mark_keybind") or {},
+    servo_skull_mark_ignore_unaggroed        = mod:get("servo_skull_mark_ignore_unaggroed") or false,
     hack_mark_keybind                        = mod:get("hack_mark_keybind") or {},
     auto_hack                                = mod:get("auto_hack") or false,
     disable_auto_hack_for_noospheric_command = mod:get("disable_auto_hack_for_noospheric_command") or false,
@@ -108,6 +110,7 @@ local context                            = {
     player_ability_extension    = nil,
     smart_tag_system            = nil,
     outline_system              = nil,
+    smoke_fog_system            = nil,
     hud_element_smart_tagging   = nil,
     companion_command_tap       = "double"
 }
@@ -200,6 +203,7 @@ local function destroy_references()
     context.player_ability_extension    = nil
     context.smart_tag_system            = nil
     context.outline_system              = nil
+    context.smoke_fog_system            = nil
     context.hud_element_smart_tagging   = nil
     mod:destroy_visibility_raycast_objects()
 end

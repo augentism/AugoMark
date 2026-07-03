@@ -192,6 +192,11 @@ local widgets = {
                 function_name   = "companion_mark",
             },
             {
+                setting_id    = "companion_mark_ignore_unaggroed",
+                type          = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id    = "execution_order_priority",
                 type          = "checkbox",
                 default_value = false,
@@ -246,6 +251,11 @@ local widgets = {
                 keybind_trigger = "pressed",
                 keybind_type    = "function_call",
                 function_name   = "servo_skull_mark",
+            },
+            {
+                setting_id    = "servo_skull_mark_ignore_unaggroed",
+                type          = "checkbox",
+                default_value = false,
             },
             {
                 setting_id      = "hack_mark_keybind",
