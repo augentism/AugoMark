@@ -188,12 +188,7 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_positio
             return true
         end
     elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
-        -- allow re-marking over teammates' companion/servo-skull marks for all enemies, but never over veteran's prey
-        local target_tag_name = target_tag and target_tag._template.name
-        if target_tag_name == TAG_NAMES.VETERAN_TAG then
-            return false
-        end
-
+        -- servo skull marks can overwrite any existing mark; only another focus target vet can overwrite a focus target
         if mod_settings.servo_skull_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
             return false
         end
