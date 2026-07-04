@@ -117,12 +117,19 @@ local function is_breed_valid(breed_data, class_settings)
 end
 
 -- Check if Tagged Target Unit can be Marked with Current Tag
-local function is_target_valid(tag_name, target_tag, target_unit, target_unit_position)
+local function is_target_valid(tag_name, target_tag, target_unit, target_position, target_breed_data)
     if tag_name == TAG_NAMES.COMPANION_TAG then
         -- arbite shouldn't mark any arbite's prey or veteran's prey
         local target_tag_name = target_tag and target_tag._template.name
-        if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
-            return false
+        local is_boss = target_breed_data and target_breed_data.is_boss
+        if is_boss then
+            if target_tag_name == TAG_NAMES.VETERAN_TAG then
+                return false
+            end
+        else
+            if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+                return false
+            end
         end
 
         if mod_settings.companion_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
@@ -142,11 +149,11 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
         end
 
         local companion_unit_position = POSITION_LOOKUP[companion_unit] or Unit_world_position(companion_unit, 1)
-        if not companion_unit_position or not target_unit_position then
+        if not companion_unit_position or not target_position then
             return false
         end
 
-        if Vector3_distance_squared(companion_unit_position, target_unit_position) < companion_range_limitation * companion_range_limitation then
+        if Vector3_distance_squared(companion_unit_position, target_position) < companion_range_limitation * companion_range_limitation then
             return true
         end
     elseif tag_name == TAG_NAMES.VETERAN_TAG then
@@ -189,8 +196,15 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
         end
     elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
         local target_tag_name = target_tag and target_tag._template.name
-        if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
-            return false
+        local is_boss = target_breed_data and target_breed_data.is_boss
+        if is_boss then
+            if target_tag_name == TAG_NAMES.VETERAN_TAG then
+                return false
+            end
+        else
+            if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+                return false
+            end
         end
 
         if mod_settings.servo_skull_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
@@ -234,12 +248,17 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_unit_po
         local max_ability_cooldown = player_ability_extension:max_ability_cooldown("combat_ability")
         local remaining_ability_cooldown = player_ability_extension:remaining_ability_cooldown("combat_ability")
 
+        if 1 / capacitance_retention_threshold < 0 then
+            capacitance_retention_threshold = max_ability_charges + capacitance_retention_threshold
+        end
+
         if remaining_ability_charges >= max_ability_charges then
             return remaining_ability_charges >= capacitance_retention_threshold
         else
             if remaining_ability_cooldown == 0 then
                 return false
             end
+
             return remaining_ability_charges + (max_ability_cooldown - remaining_ability_cooldown) / max_ability_cooldown >= capacitance_retention_threshold
         end
     elseif tag_name == TAG_NAMES.ENEMY_TAG then
@@ -314,6 +333,7 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
         end
     end
 
+    local POSITION_LOOKUP = POSITION_LOOKUP
     local servo_skull_position = POSITION_LOOKUP[servo_skull_unit] or Unit_world_position(servo_skull_unit, 1)
     local target_position = POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1)
     local is_within_range = not detection_los_requirement or detection_los_requirement >= Vector3_distance(servo_skull_position, target_position)
@@ -452,7 +472,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             end
 
             local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
-            if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos) then
+            if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos, breed_data) then
                 goto continue
             end
 
@@ -513,8 +533,8 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     return nil
 end
 
-function mod:is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos)
-    return is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos)
+function mod:is_target_valid(tag_name, target_tag, target_unit, target_position, target_breed_data)
+    return is_target_valid(tag_name, target_tag, target_unit, target_position, target_breed_data)
 end
 
 function mod:is_servo_skull_target_visible(target_unit, fixed_frame)

@@ -101,7 +101,7 @@ end
 
 table.sort(class_options, function(a, b) return a.text < b.text end)
 
-local noospheric_command_breed_name_options = {}
+local breed_name_options = {}
 do
     local elite_breed_names = {}
     local special_breed_names = {}
@@ -132,19 +132,19 @@ do
     table.sort(other_breed_names, function(a, b) return get_breed_sort(a) < get_breed_sort(b) end)
 
     for _, breed_name in ipairs(elite_breed_names) do
-        noospheric_command_breed_name_options[#noospheric_command_breed_name_options + 1] = { text = breed_name, value = breed_name }
+        breed_name_options[#breed_name_options + 1] = { text = breed_name, value = breed_name }
     end
     for _, breed_name in ipairs(special_breed_names) do
-        noospheric_command_breed_name_options[#noospheric_command_breed_name_options + 1] = { text = breed_name, value = breed_name }
+        breed_name_options[#breed_name_options + 1] = { text = breed_name, value = breed_name }
     end
     for _, breed_name in ipairs(boss_breed_names) do
-        noospheric_command_breed_name_options[#noospheric_command_breed_name_options + 1] = { text = breed_name, value = breed_name }
+        breed_name_options[#breed_name_options + 1] = { text = breed_name, value = breed_name }
     end
     for _, breed_name in ipairs(captain_breed_names) do
-        noospheric_command_breed_name_options[#noospheric_command_breed_name_options + 1] = { text = breed_name, value = breed_name }
+        breed_name_options[#breed_name_options + 1] = { text = breed_name, value = breed_name }
     end
     for _, breed_name in ipairs(other_breed_names) do
-        noospheric_command_breed_name_options[#noospheric_command_breed_name_options + 1] = { text = breed_name, value = breed_name }
+        breed_name_options[#breed_name_options + 1] = { text = breed_name, value = breed_name }
     end
 end
 
@@ -236,6 +236,56 @@ local widgets = {
                         range           = { 0, 25 },
                         decimals_number = 1
                     },
+                    {
+                        setting_id      = "companion_distance_threshold",
+                        type            = "numeric",
+                        default_value   = 0,
+                        range           = { 0, 100 },
+                        decimals_number = 1
+                    },
+                }
+            },
+            {
+                setting_id    = "companion_cancel_mark_breed_name",
+                type          = "dropdown",
+                default_value = breed_name_options[1].value,
+                options       = table.clone(breed_name_options),
+                sub_widgets   = {
+                    {
+                        setting_id    = "companion_cancel_mark_reset",
+                        type          = "dropdown",
+                        default_value = "blank",
+                        options       = {
+                            { text = "blank", value = "blank" },
+                            { text = "reset", value = "reset" },
+                        }
+                    },
+                    {
+                        setting_id    = "companion_cancel_mark_breed_override",
+                        type          = "checkbox",
+                        default_value = false,
+                    },
+                    {
+                        setting_id      = "companion_cancel_mark_breed_health_threshold",
+                        type            = "numeric",
+                        default_value   = 0,
+                        range           = { 0, 1 },
+                        decimals_number = 2
+                    },
+                    {
+                        setting_id      = "companion_cancel_mark_breed_time_threshold",
+                        type            = "numeric",
+                        default_value   = 0,
+                        range           = { 0, 25 },
+                        decimals_number = 1
+                    },
+                    {
+                        setting_id      = "companion_cancel_mark_breed_distance_threshold",
+                        type            = "numeric",
+                        default_value   = 0,
+                        range           = { 0, 100 },
+                        decimals_number = 1
+                    },
                 }
             },
         }
@@ -256,6 +306,13 @@ local widgets = {
                 setting_id    = "servo_skull_mark_ignore_unaggroed",
                 type          = "checkbox",
                 default_value = false,
+            },
+            {
+                setting_id      = "servo_skull_cancel_mark_time_threshold",
+                type            = "numeric",
+                default_value   = 0,
+                range           = { 0, 25 },
+                decimals_number = 1
             },
             {
                 setting_id      = "hack_mark_keybind",
@@ -308,21 +365,21 @@ local widgets = {
                         setting_id      = "capacitance_retention_elite_threshold",
                         type            = "numeric",
                         default_value   = 0,
-                        range           = { 0, 10 },
+                        range           = { -10, 10 },
                         decimals_number = 2,
                     },
                     {
                         setting_id      = "capacitance_retention_special_threshold",
                         type            = "numeric",
                         default_value   = 0,
-                        range           = { 0, 10 },
+                        range           = { -10, 10 },
                         decimals_number = 2,
                     },
                     {
                         setting_id      = "capacitance_retention_boss_threshold",
                         type            = "numeric",
                         default_value   = 0,
-                        range           = { 0, 10 },
+                        range           = { -10, 10 },
                         decimals_number = 2,
                     },
                 }
@@ -330,8 +387,8 @@ local widgets = {
             {
                 setting_id    = "noospheric_command_boost_breed_name",
                 type          = "dropdown",
-                default_value = noospheric_command_breed_name_options[1].value,
-                options       = noospheric_command_breed_name_options,
+                default_value = breed_name_options[1].value,
+                options       = table.clone(breed_name_options),
                 sub_widgets   = {
                     {
                         setting_id    = "noospheric_command_boost_reset",
@@ -356,7 +413,7 @@ local widgets = {
                         setting_id      = "capacitance_retention_breed_threshold",
                         type            = "numeric",
                         default_value   = 0,
-                        range           = { 0, 10 },
+                        range           = { -10, 10 },
                         decimals_number = 2,
                     },
                 }

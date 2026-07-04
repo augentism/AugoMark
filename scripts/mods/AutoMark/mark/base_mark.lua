@@ -1,22 +1,23 @@
 ---@class AutoMarkMod:DMFMod
-local mod                         = get_mod("AutoMark")
-local context                     = mod.context
-local mark_context                = mod.mark_context
-local TAG_NAMES                   = mod.TAG_NAMES
-local mod_settings                = mod.settings
+local mod                                  = get_mod("AutoMark")
+local context                              = mod.context
+local mark_context                         = mod.mark_context
+local TAG_NAMES                            = mod.TAG_NAMES
+local mod_settings                         = mod.settings
+local companion_cancel_mark_breed_settings = mod.companion_cancel_mark_breed_settings
 
 -- Imports
-local TalentSettings              = require("scripts/settings/talent/talent_settings")
-local cryptic_talent_settings     = TalentSettings.cryptic
-local noospheric_command_duration = cryptic_talent_settings.servo_skull_shooting_tagging.duration
+local TalentSettings                       = require("scripts/settings/talent/talent_settings")
+local cryptic_talent_settings              = TalentSettings.cryptic
+local noospheric_command_duration          = cryptic_talent_settings.servo_skull_shooting_tagging.duration
 
 -- Global Cache
-local CLASS                       = CLASS
-local ScriptUnit                  = ScriptUnit
+local CLASS                                = CLASS
+local ScriptUnit                           = ScriptUnit
 
 -- Delay for Server Latency, Interval for Auto Mark
-local AUTO_MARK_DELAY             = 0.5
-local AUTO_MARK_INTERVAL          = 0.25
+local AUTO_MARK_DELAY                      = 0.5
+local AUTO_MARK_INTERVAL                   = 0.25
 
 -- set delay and interval for auto mark
 local function on_set_tag(tag_context)
@@ -26,6 +27,7 @@ end
 
 -- record manual marked unit
 local function on_manual_mark(tag_context, target_unit)
+    mod:print_debug("manual mark unit:", target_unit)
     tag_context.manual_unit = target_unit
 end
 
@@ -98,7 +100,6 @@ mod:hook(CLASS.SmartTagSystem, "set_contextual_unit_tag",
             local tag_name = template and template.name
             local tag_context = mark_context[tag_name]
             if tag_context ~= nil then
-                mod:print_debug("manual mark unit")
                 -- the unit is marked manually
                 on_manual_mark(tag_context, target_unit)
                 -- set delay and interval for auto mark
@@ -119,7 +120,6 @@ mod:hook(CLASS.SmartTagSystem, "trigger_tag_interaction",
                 local tag_name = template and template.name
                 local tag_context = mark_context[tag_name]
                 if tag_context ~= nil then
-                    mod:print_debug("manual mark unit")
                     -- the unit is marked manually
                     on_manual_mark(tag_context, target_unit)
                     -- set delay and interval for auto mark
@@ -161,12 +161,18 @@ mod:hook_safe(CLASS.SmartTag, "init",
             tag_context.pounce_start_time = nil
             local target_data_extension = ScriptUnit.extension(target_unit, "unit_data_system")
             local target_breed_data = target_data_extension and target_data_extension._breed
-            local pounce_setting = target_breed_data and target_breed_data.companion_pounce_setting
-            local pounce_action = pounce_setting and pounce_setting.companion_pounce_action
-            if pounce_action == "human" then
-                tag_context.is_cancelable = mod_settings.companion_cancel_mark_human
+            local breed_name = target_breed_data and target_breed_data.name
+            local breed_settings = companion_cancel_mark_breed_settings[breed_name]
+            if breed_settings and breed_settings.override then
+                tag_context.is_cancelable = true
             else
-                tag_context.is_cancelable = mod_settings.companion_cancel_mark_non_human
+                local pounce_setting = target_breed_data and target_breed_data.companion_pounce_setting
+                local pounce_action = pounce_setting and pounce_setting.companion_pounce_action
+                if pounce_action == "human" then
+                    tag_context.is_cancelable = mod_settings.companion_cancel_mark_human
+                else
+                    tag_context.is_cancelable = mod_settings.companion_cancel_mark_non_human
+                end
             end
         elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
             if context.has_noospheric_command then
