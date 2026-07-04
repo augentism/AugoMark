@@ -1,25 +1,26 @@
 ---@class AutoMarkMod:DMFMod
-local mod                           = get_mod("AutoMark")
-local context                       = mod.context
-local mark_context                  = mod.mark_context
-local TAG_NAMES                     = mod.TAG_NAMES
-local mod_settings                  = mod.settings
+local mod                         = get_mod("AutoMark")
+local context                     = mod.context
+local mark_context                = mod.mark_context
+local TAG_NAMES                   = mod.TAG_NAMES
+local mod_settings                = mod.settings
 
 -- Imports
-local SpecialRulesSettings          = require("scripts/settings/ability/special_rules_settings")
-local CompanionServoSkullSettings   = require("scripts/settings/companion/companion_servo_skull_settings")
-local Hud                           = require("scripts/utilities/ui/hud")
-local special_rules                 = SpecialRulesSettings.special_rules
-local servo_skull_states            = CompanionServoSkullSettings.STATES
+local SpecialRulesSettings        = require("scripts/settings/ability/special_rules_settings")
+local CompanionServoSkullSettings = require("scripts/settings/companion/companion_servo_skull_settings")
+local Hud                         = require("scripts/utilities/ui/hud")
+local special_rules               = SpecialRulesSettings.special_rules
+local servo_skull_states          = CompanionServoSkullSettings.STATES
 
 -- Global Cache
-local RESOLUTION_LOOKUP             = RESOLUTION_LOOKUP
-local Managers                      = Managers
-local callback                      = callback
+local RESOLUTION_LOOKUP           = RESOLUTION_LOOKUP
+local Managers                    = Managers
+local callback                    = callback
+local GameSession                 = GameSession
 
-local HACK_TAG_NAME                 = "hacking_over_here_companion"
+local HACK_TAG_NAME               = "hacking_over_here_companion"
 
-local mark_interval                 = 0
+local mark_interval               = 0
 
 local function servo_skull_mark_callback()
     local smart_tag_system = context.smart_tag_system
@@ -231,4 +232,33 @@ function mod:auto_hack(dt, t, fixed_frame)
 
     mark_interval = 0.5
     smart_tag_system:set_tag(HACK_TAG_NAME, player_unit, target_unit)
+end
+
+function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
+    if mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or context.class_name ~= "cryptic" or not context.has_servo_skull then
+        return
+    end
+
+
+    local tag_context = mark_context[TAG_NAMES.SERVO_SKULL_TAG]
+    if tag_context.is_manual then
+        return
+    end
+
+    local marked_tag = tag_context.tag
+    local marked_unit = marked_tag and marked_tag._target_unit
+    if not marked_tag or not marked_unit then
+        return
+    end
+
+    if mod:is_servo_skull_target_visible(marked_unit, fixed_frame) then
+        tag_context.servo_skull_lose_sight_time = nil
+    elseif tag_context.servo_skull_lose_sight_time == nil then
+        tag_context.servo_skull_lose_sight_time = t
+    end
+
+    if tag_context.servo_skull_lose_sight_time and t - tag_context.servo_skull_lose_sight_time > mod_settings.servo_skull_cancel_mark_time_threshold then
+        mod:print_debug("cancel servo skull mark due to time threshold")
+        mod:cancel_mark(marked_tag._id)
+    end
 end
