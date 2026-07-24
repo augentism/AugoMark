@@ -2,6 +2,8 @@
 local mod          = get_mod("AutoMark")
 local breeds       = require("scripts/settings/breed/breeds")
 local Breed        = require("scripts/utilities/breed")
+-- Noospheric Command's shooting buff duration doubles as the re-mark cadence.
+local NOOSPHERIC_COMMAND_DURATION = require("scripts/settings/talent/talent_settings").cryptic.servo_skull_shooting_tagging.duration
 
 -- Global Cache
 local CLASS        = CLASS
@@ -618,6 +620,23 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     if not target_unit then
         return false
+    end
+
+    -- A mark on a target the skull cannot see still pings the team and still
+    -- grants the noospheric fire-rate buff (the skull shoots whatever it can
+    -- reach meanwhile), so re-issue it exactly on the buff's own cadence
+    -- instead of every tick. Targeting is still evaluated every tick, so the
+    -- normal path takes over the instant the skull gains sight.
+    if target_no_los then
+        local next_time = tag_context.no_los_next_time
+        if next_time and t < next_time and target_unit == tag_context.no_los_unit then
+            return false
+        end
+        tag_context.no_los_unit = target_unit
+        tag_context.no_los_next_time = t + NOOSPHERIC_COMMAND_DURATION
+    else
+        tag_context.no_los_unit = nil
+        tag_context.no_los_next_time = nil
     end
 
     if mod_settings.debug_mode then

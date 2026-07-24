@@ -768,7 +768,7 @@ local localization = {
         ["zh-tw"] = "標記無視線的目標",
     },
     servo_skull_mark_without_los_description = {
-        en = "When no target is visible to the servo-skull, mark the best blocked target anyway. The team still sees the ping, and the skull opens fire as soon as it has line of sight. Visible targets are always preferred.",
+        en = "When no target is visible to the servo-skull, mark the best blocked target anyway. The team still sees the ping, Noospheric Command still grants its fire-rate buff while the skull shoots whatever else it can reach, and the skull engages the marked target as soon as it has line of sight. Such marks are re-issued on the buff's own cadence; visible targets are always preferred.",
         ["zh-cn"] = "当伺服颅骨看不到任何目标时，仍然标记最佳的被遮挡目标。队伍依然能看到标记，且颅骨一旦获得视线便会开火。始终优先选择可见目标。",
         ["zh-tw"] = "當伺服顱骨看不到任何目標時，仍然標記最佳的被遮擋目標。隊伍依然能看到標記，且顱骨一旦獲得視線便會開火。始終優先選擇可見目標。",
     },
