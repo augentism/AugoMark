@@ -1,11 +1,12 @@
 --[[
     breed_priority_view.lua
-    Left: scrollable list of class contexts (select). Right: the selected
-    class's distance threshold slider plus two scroll-synced columns of
-    per-breed priority sliders (0-20) — close on the left, far on the right,
-    one line per breed, grouped by category. Mutator variants share their
-    base breed's sliders (except the Dreg Ritualist mutator). Persists to
-    mod:set("auto_mark_settings", ...) on every change.
+    Preset editor. Left: scrollable list of breed-priority presets (select /
+    create / delete). Right: the selected preset's distance threshold slider
+    plus two scroll-synced columns of per-breed priority sliders (0-20) — close
+    on the left, far on the right, grouped by category. Mutator variants share
+    their base breed's sliders (except the Dreg Ritualist mutator). Persists to
+    mod:set("breed_priority_presets", ...) on every change. An Assignments
+    button opens the class→preset assignment view.
 --]]
 
 local mod          = get_mod("AutoMark")
@@ -19,6 +20,7 @@ local UIWidgetGrid = mod:original_require("scripts/ui/widget_logic/ui_widget_gri
 local ViewElementInputLegend = mod:original_require("scripts/ui/view_elements/view_element_input_legend/view_element_input_legend")
 
 local VIEW_NAME    = "automark_breed_priority_view"
+local ASSIGNMENT_VIEW_NAME = "automark_assignment_view"
 
 local PRIORITY_MIN, PRIORITY_MAX   = 0, 20
 local THRESHOLD_MIN, THRESHOLD_MAX = 1, 60
@@ -131,10 +133,10 @@ BreedPriorityView.init = function(self, settings_arg)
     self._blueprints    = self._blueprint_data.blueprints
     self._view_settings = mod:io_dofile("AutoMark/scripts/mods/AutoMark/view/breed_priority_view_settings")
 
-    self._selected_class     = nil
-    self._class_row_widgets  = {}
-    self._class_rows_by_name = {}
-    self._class_grid         = nil
+    self._selected_preset_id = nil
+    self._preset_row_widgets = {}
+    self._preset_rows_by_id  = {}
+    self._preset_grid        = nil
     -- parallel widget lists: index i in both columns is the same visual line
     self._close_widgets      = {}
     self._far_widgets        = {}
@@ -173,22 +175,30 @@ BreedPriorityView.on_enter = function(self)
         self._input_legend_element:add_entry(leg.display_name, leg.input_action, nil, cb, leg.alignment)
     end
 
-    local copy_button = self._widgets_by_name.copy_button
-    if copy_button then
-        copy_button.content.hotspot.pressed_callback = callback(self, "cb_copy_to_all_pressed")
+    local new_button = self._widgets_by_name.new_preset_button
+    if new_button then
+        new_button.content.hotspot.pressed_callback = callback(self, "cb_new_preset")
+    end
+    local delete_button = self._widgets_by_name.delete_preset_button
+    if delete_button then
+        delete_button.content.hotspot.pressed_callback = callback(self, "cb_delete_preset")
+    end
+    local assignments_button = self._widgets_by_name.goto_assignments_button
+    if assignments_button then
+        assignments_button.content.hotspot.pressed_callback = callback(self, "cb_goto_assignments")
     end
 
     self:_build_threshold_slider()
-    self:_build_class_list()
     self:_build_breed_sliders()
+    self:_load_presets()
 
-    -- default to the class the player is currently using
-    local default_class = mod:get_menu_class_name()
-    if not self._class_rows_by_name[default_class] then
-        local class_names = mod:get_priority_class_names()
-        default_class = class_names[1]
+    -- default to the preset assigned to the class the player is using
+    local default_id = mod:get_preset_for_class(mod:get_menu_class_name())
+    if not default_id or not self._preset_rows_by_id[default_id] then
+        local ordered = mod:get_ordered_presets()
+        default_id = ordered[1] and ordered[1].id
     end
-    self:_select(default_class)
+    self:_select(default_id)
 end
 
 -- ===== Sliders =====
@@ -281,9 +291,7 @@ BreedPriorityView._build_breed_sliders = function(self)
     local scrollbar = self._widgets_by_name.breed_scrollbar
 
     -- Two grids share one scrollbar: both columns have identical row heights,
-    -- so reading the same scroll value keeps their lines aligned. The far grid
-    -- is assigned first; the close grid's assignment (last) sets the shared
-    -- wheel-scroll area spanning both columns.
+    -- so reading the same scroll value keeps their lines aligned.
     self._far_grid = UIWidgetGrid:new(
         self._far_widgets, self._far_widgets, self._ui_scenegraph,
         "far_panel", "down", spacing, nil, true
@@ -304,32 +312,34 @@ BreedPriorityView._build_breed_sliders = function(self)
     end
 end
 
-BreedPriorityView._selected_class_settings = function(self)
-    return self._selected_class and mod:get_class_settings_by_name(self._selected_class)
+BreedPriorityView._selected_preset = function(self)
+    return self._selected_preset_id and mod:get_preset(self._selected_preset_id)
 end
 
 BreedPriorityView._sync_sliders = function(self)
-    local class_settings = self:_selected_class_settings()
-    local visible        = class_settings ~= nil
+    local preset  = self:_selected_preset()
+    local visible = preset ~= nil
 
     if self._threshold_widget then
         self._threshold_widget.visible = visible
-        if class_settings then
-            sync_slider_value(self._threshold_widget, class_settings.distance_threshold or THRESHOLD_MIN)
+        if preset then
+            sync_slider_value(self._threshold_widget, preset.distance_threshold or THRESHOLD_MIN)
         end
     end
 
-    local breed_priorities = class_settings and class_settings.breed_priorities or {}
+    local breed_priorities = preset and preset.breed_priorities or {}
     for _, entry in ipairs(self._entry_sliders) do
         local priorities = breed_priorities[entry.breed_name]
         sync_slider_value(entry.close_widget, priorities and priorities.close or 0)
         sync_slider_value(entry.far_widget, priorities and priorities.far or 0)
+        entry.close_widget.visible = visible
+        entry.far_widget.visible = visible
     end
 
     local label = self._widgets_by_name.selected_label
     if label then
         label.visible = visible
-        label.content.text = self._selected_class and mod:localize(self._selected_class) or ""
+        label.content.text = preset and (preset.name or "") or ""
     end
 end
 
@@ -349,10 +359,10 @@ BreedPriorityView._apply_priority = function(self, breed_priorities, breed_name,
     end
 end
 
--- Called every frame: applies quantized slider movement to the class settings.
+-- Called every frame: applies quantized slider movement to the preset.
 BreedPriorityView._update_sliders = function(self)
-    local class_settings = self:_selected_class_settings()
-    if not class_settings then
+    local preset = self:_selected_preset()
+    if not preset then
         return
     end
 
@@ -361,12 +371,12 @@ BreedPriorityView._update_sliders = function(self)
     if self._threshold_widget then
         local value = read_slider_change(self._threshold_widget)
         if value then
-            class_settings.distance_threshold = value
+            preset.distance_threshold = value
             changed = true
         end
     end
 
-    local breed_priorities = class_settings.breed_priorities
+    local breed_priorities = preset.breed_priorities
     for _, entry in ipairs(self._entry_sliders) do
         local close_value = read_slider_change(entry.close_widget)
         if close_value then
@@ -381,77 +391,94 @@ BreedPriorityView._update_sliders = function(self)
     end
 
     if changed then
-        mod:set("auto_mark_settings", mod.auto_mark_settings, false)
+        mod:save_presets()
     end
 end
 
--- ===== Class list =====
+-- ===== Preset list =====
 
-BreedPriorityView._build_class_list = function(self)
-    local class_names = mod:get_priority_class_names()
-    local template    = self._blueprints.class_row
-    local def         = UIWidget.create_definition(template.pass_template, "class_grid_content_pivot", nil, template.size)
+BreedPriorityView._clear_presets = function(self)
+    for _, widget in ipairs(self._preset_row_widgets) do
+        pcall(function() self:_unregister_widget_name(widget.name) end)
+    end
+    self._preset_row_widgets = {}
+    self._preset_rows_by_id  = {}
+    self._preset_grid        = nil
+end
 
-    for i, class_name in ipairs(class_names) do
-        local widget = self:_create_widget("class_row_" .. i, def)
+BreedPriorityView._load_presets = function(self)
+    self:_clear_presets()
+
+    local template = self._blueprints.class_row
+    local def      = UIWidget.create_definition(template.pass_template, "class_grid_content_pivot", nil, template.size)
+
+    for i, item in ipairs(mod:get_ordered_presets()) do
+        local count = mod:count_preset_assignments(item.id)
+        local widget = self:_create_widget("preset_row_" .. i, def)
         template.init(self, widget, {
-            title    = mod:localize(class_name),
-            subtitle = "",
-            id       = class_name,
-        }, "cb_on_class_pressed")
-        self._class_row_widgets[#self._class_row_widgets + 1] = widget
-        self._class_rows_by_name[class_name] = widget
+            title    = item.preset.name or "Preset",
+            subtitle = mod:localize("preset_assignment_count", count),
+            id       = item.id,
+        }, "cb_on_preset_pressed")
+        self._preset_row_widgets[#self._preset_row_widgets + 1] = widget
+        self._preset_rows_by_id[item.id] = widget
     end
 
-    if #self._class_row_widgets > 0 then
-        self._class_grid = UIWidgetGrid:new(
-            self._class_row_widgets, self._class_row_widgets, self._ui_scenegraph,
+    if #self._preset_row_widgets > 0 then
+        self._preset_grid = UIWidgetGrid:new(
+            self._preset_row_widgets, self._preset_row_widgets, self._ui_scenegraph,
             "class_panel", "down", self._view_settings.grid_spacing, nil, true
         )
-        self._class_grid:set_render_scale(self._render_scale)
+        self._preset_grid:set_render_scale(self._render_scale)
         local scrollbar = self._widgets_by_name.class_scrollbar
         if scrollbar then
-            self._class_grid:assign_scrollbar(scrollbar, "class_grid_content_pivot", "class_panel")
-            self._class_grid:set_scrollbar_progress(0)
+            self._preset_grid:assign_scrollbar(scrollbar, "class_grid_content_pivot", "class_panel")
+            self._preset_grid:set_scrollbar_progress(0)
         end
+    end
+
+    -- delete is only meaningful when more than one preset exists
+    local delete_button = self._widgets_by_name.delete_preset_button
+    if delete_button then
+        delete_button.visible = #self._preset_row_widgets > 1
     end
 end
 
-BreedPriorityView._select = function(self, class_name)
-    self._selected_class = class_name
-    for row_class_name, widget in pairs(self._class_rows_by_name) do
-        widget.content.is_selected = (row_class_name == class_name)
+BreedPriorityView._select = function(self, preset_id)
+    self._selected_preset_id = preset_id
+    for row_id, widget in pairs(self._preset_rows_by_id) do
+        widget.content.is_selected = (row_id == preset_id)
     end
     self:_sync_sliders()
 end
 
 -- ===== Callbacks =====
 
-BreedPriorityView.cb_on_class_pressed = function(self, widget, entry)
+BreedPriorityView.cb_on_preset_pressed = function(self, widget, entry)
     self:_select(entry.id)
 end
 
--- Copies the selected class's distance threshold and breed priorities to
--- every other class context. Other class settings (cooldown, ranges,
--- toggles) are left alone; the DMF options apply button covers those.
-BreedPriorityView.cb_copy_to_all_pressed = function(self)
-    local source = self:_selected_class_settings()
-    if not source then
+BreedPriorityView.cb_new_preset = function(self)
+    local preset_id = mod:create_preset()
+    self:_load_presets()
+    self:_select(preset_id)
+end
+
+BreedPriorityView.cb_delete_preset = function(self)
+    local preset_id = self._selected_preset_id
+    if not preset_id then
         return
     end
-
-    for _, class_name in ipairs(mod:get_priority_class_names()) do
-        if class_name ~= self._selected_class then
-            local dest = mod:get_class_settings_by_name(class_name)
-            if dest then
-                dest.distance_threshold = source.distance_threshold
-                dest.breed_priorities = table.clone(source.breed_priorities)
-            end
-        end
+    if mod:delete_preset(preset_id) then
+        self:_load_presets()
+        local ordered = mod:get_ordered_presets()
+        self:_select(ordered[1] and ordered[1].id)
     end
+end
 
-    mod:set("auto_mark_settings", mod.auto_mark_settings, false)
-    mod:echo(mod:localize("copied_to_all_classes") .. ": " .. mod:localize(self._selected_class))
+BreedPriorityView.cb_goto_assignments = function(self)
+    Managers.ui:close_view(VIEW_NAME)
+    Managers.ui:open_view(ASSIGNMENT_VIEW_NAME)
 end
 
 BreedPriorityView.cb_on_back_pressed = function(self)
@@ -461,8 +488,8 @@ end
 -- ===== Update / Draw =====
 
 BreedPriorityView.update = function(self, dt, t, input_service)
-    if self._class_grid then
-        self._class_grid:update(dt, t, input_service)
+    if self._preset_grid then
+        self._preset_grid:update(dt, t, input_service)
     end
     if self._close_grid then
         self._close_grid:update(dt, t, input_service)
@@ -477,8 +504,8 @@ end
 BreedPriorityView.draw = function(self, dt, t, input_service, layer)
     self:_draw_elements(dt, t, self._ui_renderer, self._render_settings, input_service)
 
-    if #self._class_row_widgets > 0 then
-        self:_draw_grid(self._class_grid, self._class_row_widgets, dt, t, input_service)
+    if #self._preset_row_widgets > 0 then
+        self:_draw_grid(self._preset_grid, self._preset_row_widgets, dt, t, input_service)
     end
     if #self._close_widgets > 0 then
         self:_draw_grid(self._close_grid, self._close_widgets, dt, t, input_service)

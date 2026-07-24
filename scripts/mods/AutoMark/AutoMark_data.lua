@@ -1,51 +1,10 @@
 local mod            = get_mod("AutoMark")
 local Breed          = require("scripts/utilities/breed")
 local Breeds         = require("scripts/settings/breed/breeds")
-local Archetypes     = require("scripts/settings/archetype/archetypes")
-
-local elite_widget   = {
-    setting_id    = "toggle_elite",
-    type          = "checkbox",
-    default_value = true,
-    sub_widgets   = {},
-}
-
-local special_widget = {
-    setting_id    = "toggle_special",
-    type          = "checkbox",
-    default_value = true,
-    sub_widgets   = {},
-}
-
-local boss_widget    = {
-    setting_id    = "toggle_boss",
-    type          = "checkbox",
-    default_value = true,
-    sub_widgets   = {},
-}
-
-local other_widget   = {
-    setting_id    = "toggle_other",
-    type          = "checkbox",
-    default_value = true,
-    sub_widgets   = {},
-}
 
 local get_breed_sort = function(breed_name)
     return mod:localize(breed_name)
 end
-
-local class_options = {
-    { text = "adamant_companion",    value = "adamant_companion" },
-    { text = "veteran_focus_target", value = "veteran_focus_target" },
-    { text = "cryptic_servo_skull",  value = "cryptic_servo_skull" },
-}
-
-for class_name, _ in pairs(Archetypes) do
-    class_options[#class_options + 1] = { text = class_name, value = class_name }
-end
-
-table.sort(class_options, function(a, b) return a.text < b.text end)
 
 local breed_name_options = {}
 do
@@ -125,6 +84,14 @@ local widgets = {
                 keybind_trigger = "pressed",
                 keybind_type    = "view_toggle",
                 view_name       = "automark_breed_priority_view",
+            },
+            {
+                setting_id      = "open_assignment_view",
+                type            = "keybind",
+                default_value   = {},
+                keybind_trigger = "pressed",
+                keybind_type    = "view_toggle",
+                view_name       = "automark_assignment_view",
             },
             {
                 setting_id    = "debug_mode",
@@ -437,85 +404,6 @@ local widgets = {
                     },
                 }
             }
-        }
-    },
-    {
-        setting_id  = "auto_mark_settings",
-        type        = "group",
-        sub_widgets = {
-            {
-                setting_id    = "class_selection",
-                type          = "dropdown",
-                default_value = "adamant",
-                options       = class_options,
-            },
-            {
-                setting_id    = "apply_button",
-                type          = "dropdown",
-                default_value = "blank",
-                options       = {
-                    { text = "apply_to_normal", value = "apply_to_normal" },
-                    { text = "apply_to_all",    value = "apply_to_all" },
-                    { text = "blank",           value = "blank" },
-                }
-            },
-            {
-                setting_id    = "reset_button",
-                type          = "dropdown",
-                default_value = "blank",
-                options       = {
-                    { text = "reset_current", value = "reset_current" },
-                    { text = "reset_all",     value = "reset_all" },
-                    { text = "blank",         value = "blank" },
-                }
-            },
-            {
-                setting_id    = "toggle_class",
-                type          = "checkbox",
-                default_value = true,
-            },
-            {
-                setting_id    = "cooldown",
-                type          = "numeric",
-                default_value = 25,
-                range         = { 1, 50 },
-            },
-            {
-                setting_id = "reset_cooldown",
-                type = "checkbox",
-                default_value = true
-            },
-            {
-                setting_id = "mark_limit",
-                type = "checkbox",
-                default_value = true
-            },
-            {
-                setting_id    = "min_range",
-                type          = "numeric",
-                default_value = 0,
-                range         = { 0, 100 },
-            },
-            {
-                setting_id    = "max_range",
-                type          = "numeric",
-                default_value = 100,
-                range         = { 1, 100 },
-            },
-            {
-                setting_id = "override_manual",
-                type = "checkbox",
-                default_value = false
-            },
-            {
-                setting_id = "priority_switch",
-                type = "checkbox",
-                default_value = false
-            },
-            elite_widget,
-            special_widget,
-            boss_widget,
-            other_widget,
         }
     },
 }

@@ -67,14 +67,31 @@ local scenegraph_definition  = {
         position             = { 24, 0, 1 },
     },
 
-    -- sits beside the threshold slider, clear of the class list so clicks
-    -- cannot fall through onto a (masked but still interactive) class row
-    copy_button = {
+    -- preset list controls: New/Delete above the list, Assignments below.
+    -- All parented to screen (not the masked panel) so clicks cannot fall
+    -- through onto a clipped-but-still-interactive preset row.
+    new_preset_button = {
         vertical_alignment   = "top",
         parent               = "screen",
         horizontal_alignment = "left",
-        size                 = { far_grid_size[1], 44 },
-        position             = { FAR_X, PANEL_TOP - 40, 2 },
+        size                 = { (class_grid_size[1] - 10) * 0.5, 44 },
+        position             = { CLASS_X, PANEL_TOP - 52, 2 },
+    },
+
+    delete_preset_button = {
+        vertical_alignment   = "top",
+        parent               = "screen",
+        horizontal_alignment = "left",
+        size                 = { (class_grid_size[1] - 10) * 0.5, 44 },
+        position             = { CLASS_X + (class_grid_size[1] - 10) * 0.5 + 10, PANEL_TOP - 52, 2 },
+    },
+
+    goto_assignments_button = {
+        vertical_alignment   = "top",
+        parent               = "screen",
+        horizontal_alignment = "left",
+        size                 = { class_grid_size[1], 44 },
+        position             = { CLASS_X, PANEL_TOP + class_grid_size[2] + 12, 2 },
     },
 
     -- title
@@ -233,7 +250,7 @@ local widget_definitions = {
             value_id  = "text",
             style_id  = "text",
             pass_type = "text",
-            value     = mod:localize("breed_priority_view_title"),
+            value     = mod:localize("preset_editor_view_title"),
             style     = table.clone(UIFontSettings.header_1),
         }
     }, "title_text"),
@@ -275,9 +292,19 @@ local widget_definitions = {
 
     class_scrollbar = UIWidget.create_definition(ScrollbarPassTemplates.default_scrollbar, "class_scrollbar"),
 
-    copy_button = UIWidget.create_definition(
-        table.clone(ButtonPassTemplates.default_button), "copy_button",
-        { original_text = mod:localize("copy_to_all_classes") }
+    new_preset_button = UIWidget.create_definition(
+        table.clone(ButtonPassTemplates.default_button), "new_preset_button",
+        { original_text = mod:localize("new_preset") }
+    ),
+
+    delete_preset_button = UIWidget.create_definition(
+        table.clone(ButtonPassTemplates.default_button), "delete_preset_button",
+        { original_text = mod:localize("delete_preset") }
+    ),
+
+    goto_assignments_button = UIWidget.create_definition(
+        table.clone(ButtonPassTemplates.default_button), "goto_assignments_button",
+        { original_text = mod:localize("goto_assignments") }
     ),
 
     class_grid_mask = UIWidget.create_definition({

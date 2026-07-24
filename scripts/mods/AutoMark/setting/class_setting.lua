@@ -32,34 +32,9 @@ for class_name, _ in pairs(Archetypes) do
     VALID_CLASSES[class_name] = true
 end
 
-local OFF_PRIORITY = { close = 0, far = 0 }
-
-local ADAMANT_COMPANION_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
-local adamant_companion_breed_priorities = ADAMANT_COMPANION_DEFAULT_CLASS_SETTINGS.breed_priorities
-adamant_companion_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-adamant_companion_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-adamant_companion_breed_priorities["chaos_ogryn_houndmaster"] = table_clone(OFF_PRIORITY)
-adamant_companion_breed_priorities["chaos_poxwalker_bomber"] = table_clone(OFF_PRIORITY)
-
-local CRYPTIC_SERVO_SKULL_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
-local cryptic_servo_skull_breed_priorities = CRYPTIC_SERVO_SKULL_DEFAULT_CLASS_SETTINGS.breed_priorities
-cryptic_servo_skull_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-cryptic_servo_skull_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-cryptic_servo_skull_breed_priorities["chaos_poxwalker_bomber"] = table_clone(OFF_PRIORITY)
-
-local VETERAN_FOCUS_TARGET_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
-local veteran_focus_target_breed_priorities = VETERAN_FOCUS_TARGET_DEFAULT_CLASS_SETTINGS.breed_priorities
-veteran_focus_target_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-veteran_focus_target_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
-
+-- Class settings now hold only behavioral options; breed priorities and the
+-- close/far threshold live in shared presets, so every class shares defaults.
 local function get_default_class_settings(class_name)
-    if class_name == ADAMANT_COMPANION then
-        return ADAMANT_COMPANION_DEFAULT_CLASS_SETTINGS
-    elseif class_name == CRYPTIC_SERVO_SKULL then
-        return CRYPTIC_SERVO_SKULL_DEFAULT_CLASS_SETTINGS
-    elseif class_name == VETERAN_FOCUS_TARGET then
-        return VETERAN_FOCUS_TARGET_DEFAULT_CLASS_SETTINGS
-    end
     return DEFAULT_CLASS_SETTINGS
 end
 
@@ -104,60 +79,166 @@ function mod:init_auto_mark_settings()
     end
 
     mod:set("auto_mark_settings", auto_mark_settings, false)
-end
 
--- Reset Auto Mark Settings to Default
-function mod:reset_auto_mark_settings()
-    for class_name, _ in pairs(VALID_CLASSES) do
-        auto_mark_settings[class_name] = table_clone(get_default_class_settings(class_name))
+    -- backfill: every valid class should point at a preset (fresh installs,
+    -- or classes added since the presets were first created)
+    local presets = mod.breed_priority_presets
+    local assignments = mod.breed_priority_assignments
+    local fallback_id = next(presets)
+    if fallback_id then
+        local changed = false
+        for class_name, _ in pairs(VALID_CLASSES) do
+            if not assignments[class_name] or not presets[assignments[class_name]] then
+                assignments[class_name] = fallback_id
+                changed = true
+            end
+        end
+        if changed then
+            mod:set("breed_priority_assignments", assignments, false)
+        end
     end
-
-    mod:set("auto_mark_settings", auto_mark_settings, false)
 end
 
-function mod:reset_class_settings(class_name)
-    if not VALID_CLASSES[class_name] then
+-- ===== Breed priority presets =====
+
+local breed_priority_presets     = mod.breed_priority_presets
+local breed_priority_assignments = mod.breed_priority_assignments
+
+local function persist_presets()
+    mod:set("breed_priority_presets", breed_priority_presets, false)
+end
+
+local function persist_assignments()
+    mod:set("breed_priority_assignments", breed_priority_assignments, false)
+end
+
+-- any existing preset id, for use as a fallback assignment
+local function any_preset_id()
+    return (next(breed_priority_presets))
+end
+
+function mod:get_presets()
+    return breed_priority_presets
+end
+
+-- ordered list of { id, preset } for list display, sorted by name
+function mod:get_ordered_presets()
+    local order = {}
+    for id, preset in pairs(breed_priority_presets) do
+        order[#order + 1] = { id = id, preset = preset }
+    end
+    table.sort(order, function(a, b) return (a.preset.name or "") < (b.preset.name or "") end)
+    return order
+end
+
+function mod:get_preset(preset_id)
+    return preset_id and breed_priority_presets[preset_id]
+end
+
+-- number of class contexts assigned to a preset (for the list subtitle)
+function mod:count_preset_assignments(preset_id)
+    local count = 0
+    for _, assigned_id in pairs(breed_priority_assignments) do
+        if assigned_id == preset_id then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function mod:get_preset_for_class(class_name)
+    local preset_id = breed_priority_assignments[class_name]
+    return preset_id, preset_id and breed_priority_presets[preset_id]
+end
+
+function mod:assign_preset(class_name, preset_id)
+    if not breed_priority_presets[preset_id] then
         return
     end
-
-    auto_mark_settings[class_name] = table_clone(get_default_class_settings(class_name))
-    mod:set("auto_mark_settings", auto_mark_settings, false)
+    breed_priority_assignments[class_name] = preset_id
+    persist_assignments()
 end
 
--- Apply Settings to All Classes
-function mod:apply_to_all_classes(class_name)
-    for other_class_name, _ in pairs(VALID_CLASSES) do
-        if other_class_name ~= class_name then
-            auto_mark_settings[other_class_name] = table_clone(auto_mark_settings[class_name])
-        end
-    end
-    mod:set("auto_mark_settings", auto_mark_settings, false)
-end
-
--- Apply Settings to Normal Tag
-function mod:apply_to_normal_tag(class_name)
-    for other_class_name, _ in pairs(BASE_CLASSES) do
-        if other_class_name ~= class_name then
-            auto_mark_settings[other_class_name] = table_clone(auto_mark_settings[class_name])
-        end
-    end
-    mod:set("auto_mark_settings", auto_mark_settings, false)
-end
-
--- Set Menu for Display
-function mod:set_menu_settings(class_name)
-    if not VALID_CLASSES[class_name] then
+function mod:assign_preset_to_all(preset_id)
+    if not breed_priority_presets[preset_id] then
         return
     end
+    for _, class_name in ipairs(mod:get_priority_class_names()) do
+        breed_priority_assignments[class_name] = preset_id
+    end
+    persist_assignments()
+end
 
-    mod:set("class_selection", class_name, false)
-    local class_settings = auto_mark_settings[class_name]
-    for setting_name, default_setting in pairs(get_default_class_settings(class_name)) do
-        -- breed_priorities no longer have DMF option widgets; they are edited in the breed priority view
-        if type(default_setting) ~= "table" then
-            mod:set(setting_name, class_settings[setting_name], false)
+function mod:create_preset()
+    -- next "Preset N" number not already taken
+    local max_n = 0
+    for _, preset in pairs(breed_priority_presets) do
+        local n = tonumber(tostring(preset.name):match("Preset (%d+)"))
+        if n and n > max_n then
+            max_n = n
         end
     end
+    local preset_id = mod.make_preset_id()
+    breed_priority_presets[preset_id] = mod.build_default_preset("Preset " .. (max_n + 1))
+    persist_presets()
+    return preset_id
+end
+
+-- returns true if deleted; refuses to delete the final preset
+function mod:delete_preset(preset_id)
+    if not breed_priority_presets[preset_id] then
+        return false
+    end
+    local remaining = 0
+    for _ in pairs(breed_priority_presets) do
+        remaining = remaining + 1
+    end
+    if remaining <= 1 then
+        return false
+    end
+
+    breed_priority_presets[preset_id] = nil
+    local fallback = any_preset_id()
+    for class_name, assigned_id in pairs(breed_priority_assignments) do
+        if assigned_id == preset_id then
+            breed_priority_assignments[class_name] = fallback
+        end
+    end
+    persist_presets()
+    persist_assignments()
+    return true
+end
+
+function mod:save_presets()
+    persist_presets()
+end
+
+-- Resolve the assigned preset for a tag; falls back to any preset, then a
+-- freshly built default, so scoring always has priorities to read.
+function mod:get_assigned_preset(tag_name)
+    local class_name
+    if tag_name == TAG_NAMES.ENEMY_TAG then
+        class_name = context.class_name
+    elseif tag_name == TAG_NAMES.VETERAN_TAG then
+        class_name = VETERAN_FOCUS_TARGET
+    elseif tag_name == TAG_NAMES.COMPANION_TAG then
+        class_name = ADAMANT_COMPANION
+    elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+        class_name = CRYPTIC_SERVO_SKULL
+    end
+
+    local preset_id = class_name and breed_priority_assignments[class_name]
+    local preset = preset_id and breed_priority_presets[preset_id]
+    if preset then
+        return preset
+    end
+
+    local fallback_id = any_preset_id()
+    if fallback_id then
+        return breed_priority_presets[fallback_id]
+    end
+
+    return mod.build_default_preset("Preset 1")
 end
 
 -- Ordered class list for the breed priority view: special tag contexts first,

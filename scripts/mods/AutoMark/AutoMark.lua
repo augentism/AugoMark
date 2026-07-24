@@ -90,49 +90,48 @@ end
 local companion_cancel_mark_breed_settings = mod:get("companion_cancel_mark_breed_settings") or {}
 mod.companion_cancel_mark_breed_settings = companion_cancel_mark_breed_settings
 
--- Default Class Settings
--- breed_priorities entries are { close = 0-20, far = 0-20 }, selected by
--- comparing target distance against the class's distance_threshold.
-local DEFAULT_BREED_PRIORITY = 12
+-- Default Class Settings (behavioral only; breed priorities and the close/far
+-- distance threshold live in shared presets, see breed_priority_presets)
 local DEFAULT_CLASS_SETTINGS = {
-    toggle_class       = true,
-    cooldown           = 25,
-    reset_cooldown     = true,
-    mark_limit         = true,
-    min_range          = 0,
-    max_range          = 100,
-    distance_threshold = 15,
-    override_manual    = false,
-    priority_switch    = false,
-    toggle_elite       = true,
-    toggle_special     = true,
-    toggle_boss        = true,
-    toggle_other       = true,
-    breed_priorities   = {},
+    toggle_class    = true,
+    cooldown        = 25,
+    reset_cooldown  = true,
+    mark_limit      = true,
+    min_range       = 0,
+    max_range       = 100,
+    override_manual = false,
+    priority_switch = false,
+    toggle_elite    = true,
+    toggle_special  = true,
+    toggle_boss     = true,
+    toggle_other    = true,
 }
+mod.DEFAULT_CLASS_SETTINGS               = DEFAULT_CLASS_SETTINGS
+
+-- Default preset content: every taggable breed at priority 12, close and far
+-- entries are { close = 0-20, far = 0-20 }, selected by comparing target
+-- distance against the preset's distance_threshold.
+local DEFAULT_BREED_PRIORITY             = 12
+local DEFAULT_PRESET_THRESHOLD           = 15
+local DEFAULT_PRESET_PRIORITIES          = {}
 for breed_name, breed_data in pairs(breeds) do
     if Breed.is_minion(breed_data) and breed_data.smart_tag_target_type == "breed" then
-        if breed_data.tags.elite then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
-        elseif breed_data.tags.special then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
-        elseif breed_data.is_boss then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+        if breed_data.tags.elite or breed_data.tags.special or breed_data.is_boss or breed_data.faction_name ~= "imperium" then
+            DEFAULT_PRESET_PRIORITIES[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
             if breed_data.tags.witch then
-                DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name .. "_passive"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+                DEFAULT_PRESET_PRIORITIES[breed_name .. "_passive"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
             end
-        elseif breed_data.faction_name ~= "imperium" then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
         end
     end
 end
 -- Mutator ritualists channeling a daemonhost ritual at half/full speed have
 -- their own priority entries (detected at scan time from synced game state)
-if DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist"] then
-    DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist_half"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
-    DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist_full"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+if DEFAULT_PRESET_PRIORITIES["chaos_mutator_ritualist"] then
+    DEFAULT_PRESET_PRIORITIES["chaos_mutator_ritualist_half"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+    DEFAULT_PRESET_PRIORITIES["chaos_mutator_ritualist_full"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
 end
-mod.DEFAULT_CLASS_SETTINGS               = DEFAULT_CLASS_SETTINGS
+mod.DEFAULT_PRESET_PRIORITIES            = DEFAULT_PRESET_PRIORITIES
+mod.DEFAULT_PRESET_THRESHOLD             = DEFAULT_PRESET_THRESHOLD
 
 -- Context
 ---@class AutoMarkContext
@@ -176,6 +175,92 @@ for _, class_settings in pairs(auto_mark_settings) do
         end
     end
 end
+
+-- Breed Priority Presets
+-- Presets hold { name, distance_threshold, breed_priorities }; assignments
+-- map class keys to preset ids. Class settings keep only behavioral options.
+local breed_priority_presets     = mod:get("breed_priority_presets") or nil
+local breed_priority_assignments = mod:get("breed_priority_assignments") or {}
+
+local function make_preset_id()
+    return string.format("preset_%d_%d", math.random(100000, 999999), math.random(100000, 999999))
+end
+
+local function build_default_preset(name)
+    local breed_priorities = {}
+    for breed_name, entry in pairs(DEFAULT_PRESET_PRIORITIES) do
+        breed_priorities[breed_name] = { close = entry.close, far = entry.far }
+    end
+    return {
+        name               = name,
+        distance_threshold = DEFAULT_PRESET_THRESHOLD,
+        breed_priorities   = breed_priorities,
+    }
+end
+
+mod.make_preset_id       = make_preset_id
+mod.build_default_preset = build_default_preset
+
+-- One-time migration: fold the per-class priority tables into deduplicated
+-- presets. Must read auto_mark_settings before init_auto_mark_settings prunes
+-- the now-removed breed_priorities/distance_threshold keys.
+if breed_priority_presets == nil then
+    breed_priority_presets = {}
+
+    local function canonical_key(distance_threshold, breed_priorities)
+        local parts = {}
+        for breed_name, entry in pairs(breed_priorities) do
+            if type(entry) == "table" then
+                parts[#parts + 1] = string.format("%s:%d:%d", breed_name, entry.close or 0, entry.far or 0)
+            end
+        end
+        table.sort(parts)
+        return tostring(distance_threshold or DEFAULT_PRESET_THRESHOLD) .. "|" .. table.concat(parts, ";")
+    end
+
+    local preset_id_by_key = {}
+    local num_presets = 0
+    for class_name, class_settings in pairs(auto_mark_settings) do
+        if type(class_settings) == "table" and type(class_settings.breed_priorities) == "table" then
+            local key = canonical_key(class_settings.distance_threshold, class_settings.breed_priorities)
+            local preset_id = preset_id_by_key[key]
+            if not preset_id then
+                num_presets = num_presets + 1
+                preset_id = make_preset_id() .. "_" .. num_presets
+                local breed_priorities = {}
+                for breed_name, entry in pairs(class_settings.breed_priorities) do
+                    if type(entry) == "table" then
+                        breed_priorities[breed_name] = { close = entry.close or 0, far = entry.far or 0 }
+                    end
+                end
+                breed_priority_presets[preset_id] = {
+                    name               = "Preset " .. num_presets,
+                    distance_threshold = class_settings.distance_threshold or DEFAULT_PRESET_THRESHOLD,
+                    breed_priorities   = breed_priorities,
+                }
+                preset_id_by_key[key] = preset_id
+            end
+            breed_priority_assignments[class_name] = preset_id
+        end
+    end
+end
+
+-- always keep at least one preset
+if next(breed_priority_presets) == nil then
+    breed_priority_presets[make_preset_id()] = build_default_preset("Preset 1")
+end
+
+-- drop assignments pointing at deleted/unknown presets
+for class_name, preset_id in pairs(breed_priority_assignments) do
+    if not breed_priority_presets[preset_id] then
+        breed_priority_assignments[class_name] = nil
+    end
+end
+
+mod.breed_priority_presets     = breed_priority_presets
+mod.breed_priority_assignments = breed_priority_assignments
+mod:set("breed_priority_presets", breed_priority_presets, false)
+mod:set("breed_priority_assignments", breed_priority_assignments, false)
 
 -- Mark States
 ---@class AutoMarkMarkContext
@@ -292,21 +377,20 @@ mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/focus_target_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/servo_skull_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/medicae_assist")
 
--- Breed Priority View
-local function register_breed_priority_view()
-    local base = "AutoMark/scripts/mods/AutoMark/view/breed_priority_view"
+-- Custom Views (preset editor + preset-to-class assignment)
+local function register_automark_view(base, view_name, class_name, display_name)
     mod:add_require_path(base)
     mod:add_require_path(base .. "_definitions")
     mod:add_require_path(base .. "_blueprints")
     mod:add_require_path(base .. "_settings")
 
     mod:register_view({
-        view_name = "automark_breed_priority_view",
+        view_name = view_name,
         view_settings = {
             init_view_function = function(_) return true end,
-            class               = "BreedPriorityView",
+            class               = class_name,
             disable_game_world  = false,
-            display_name        = "Auto Mark Breed Priorities",
+            display_name        = display_name,
             game_world_blur     = 1.1,
             load_always         = true,
             load_in_hub         = true,
@@ -328,7 +412,14 @@ local function register_breed_priority_view()
     mod:io_dofile(base)
 end
 
-register_breed_priority_view()
+register_automark_view(
+    "AutoMark/scripts/mods/AutoMark/view/breed_priority_view",
+    "automark_breed_priority_view", "BreedPriorityView", "Auto Mark Breed Priorities"
+)
+register_automark_view(
+    "AutoMark/scripts/mods/AutoMark/view/assignment_view",
+    "automark_assignment_view", "AssignmentView", "Auto Mark Preset Assignment"
+)
 
 --  Mod Enabled
 mod.on_enabled            = function(initial_call)
@@ -339,7 +430,6 @@ mod.on_enabled            = function(initial_call)
     mod:init_context()
     mod:init_execution_order_units()
     mod:init_visibility_raycast_objects()
-    mod:set_menu_settings(mod:get_menu_class_name())
 end
 
 --  Mod Disabled
@@ -357,8 +447,6 @@ mod.on_game_state_changed = function(status, state_name)
             mod:check_game_mode()
             -- game settings cache
             mod:init_game_settings()
-            -- display
-            mod:set_menu_settings(mod:get_menu_class_name())
         elseif status == "exit" then
             context.game_mode_valid = false
             -- menu mark info rest
@@ -370,7 +458,6 @@ end
 -- Mod Setting Change
 mod.on_setting_changed    = function(setting_id)
     local result = mod:get(setting_id)
-    local class_name = mod:get("class_selection")
     -- Normal Mod Settings
     if mod_settings[setting_id] ~= nil then
         mod_settings[setting_id] = result
@@ -381,23 +468,6 @@ mod.on_setting_changed    = function(setting_id)
                 mod:set(setting_id .. "_negative_zero", false, false)
             end
         end
-        -- Apply Class Settings to Other Classes
-    elseif setting_id == "apply_button" then
-        if result == "apply_to_all" then
-            mod:apply_to_all_classes(class_name)
-        elseif result == "apply_to_normal" then
-            mod:apply_to_normal_tag(class_name)
-        end
-        mod:set("apply_button", "blank", false)
-        -- Reset Class Settings
-    elseif setting_id == "reset_button" then
-        if result == "reset_all" then
-            mod:reset_auto_mark_settings()
-        elseif result == "reset_current" then
-            mod:reset_class_settings(class_name)
-        end
-        mod:set_menu_settings(class_name)
-        mod:set("reset_button", "blank", false)
         -- Reset Noospheric Command Breed Settings
     elseif setting_id == "noospheric_command_boost_reset" then
         if result == "reset" then
@@ -462,16 +532,6 @@ mod.on_setting_changed    = function(setting_id)
             companion_cancel_mark_breed_settings[breed_name].distance_threshold = result
         end
         mod:set("companion_cancel_mark_breed_settings", companion_cancel_mark_breed_settings, false)
-        -- Set Class Name
-    elseif setting_id == "class_selection" then
-        mod:set_menu_settings(class_name)
-        -- Set Class Settings
-    else
-        local class_settings = auto_mark_settings[class_name]
-        if DEFAULT_CLASS_SETTINGS[setting_id] ~= nil then
-            class_settings[setting_id] = result
-        end
-        mod:set("auto_mark_settings", auto_mark_settings, false)
     end
 end
 
@@ -500,6 +560,10 @@ end
 -- Auto-Mark Target Unit with the Tag
 local function auto_mark_by_tag(tag_name, t, fixed_frame)
     if not is_tag_valid(tag_name) then
+        if mod_settings.debug_mode and tag_name == TAG_NAMES.SERVO_SKULL_TAG
+            and context.class_name == "cryptic" and context.has_servo_skull then
+            mod:print_debug("servo skull tag unavailable (skull hacking) - will fall back to a plain mark")
+        end
         return false
     end
 
@@ -514,12 +578,12 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
     -- mark when execution order priority is on
     local is_execution_order_priority = mod_settings.execution_order_priority and tag_name == TAG_NAMES.COMPANION_TAG and context.has_execution_order
 
-    local target_unit, target_tag
+    local target_unit, target_tag, target_breed_name, target_priority, target_band
     if class_settings.toggle_class and (class_settings.override_manual or not marked_tag_is_manual) then
         if is_cooldown_ready then
-            target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
+            target_unit, target_tag, target_breed_name, target_priority, target_band = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
         elseif is_priority_switch or is_execution_order_priority and marked_tag then
-            target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
+            target_unit, target_tag, target_breed_name, target_priority, target_band = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
         end
     end
     -- mark when focus target overwrite is on
@@ -555,7 +619,11 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
         return false
     end
 
-    mod:print_debug("Auto Mark", tag_name, target_unit)
+    if mod_settings.debug_mode then
+        local action = tag_name == TAG_NAMES.SERVO_SKULL_TAG and "Auto Attack" or "Auto Mark"
+        mod:print_debug(action, tag_name, "breed:", target_breed_name or "?",
+            "prio:", target_priority or "?", "band:", target_band or "-")
+    end
     mod:mark(tag_name, target_unit, target_tag)
     return true
 end

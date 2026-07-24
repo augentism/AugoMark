@@ -184,11 +184,12 @@ local function get_breed_priority(target_unit, breed_data, breed_priorities, dis
         return entry
     end
 
+    -- second return value is the band used, for diagnostics
     if distance and distance_threshold and distance <= distance_threshold then
-        return entry.close
+        return entry.close, "close"
     end
 
-    return entry.far
+    return entry.far, "far"
 end
 
 local BURSTER_BREEDS = { chaos_poxwalker_bomber = true }
@@ -535,14 +536,29 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     local ray_origin, forward, right, up = smart_targeting_extension:_targeting_parameters()
     local fixed_frame = smart_targeting_extension._latest_fixed_frame
     local canceled_unit = tag_context and tag_context.canceled_unit
-    local breed_priorities = class_settings and class_settings.breed_priorities or EMPTY_TABLE
-    local distance_threshold = class_settings and class_settings.distance_threshold
+    -- breed priorities and the close/far threshold come from the preset
+    -- assigned to this tag's class context
+    local preset = mod:get_assigned_preset(tag_name)
+    local breed_priorities = preset and preset.breed_priorities or EMPTY_TABLE
+    local distance_threshold = preset and preset.distance_threshold
     local execution_order_units = mark_context.execution_order_units
     local best_unit = nil
     local best_unit_tag = nil
     local best_unit_priority = -math.huge
     local best_unit_marked_by_execution_order = false
     local best_unit_distance = math.huge
+    local best_unit_band = nil
+    local best_unit_breed_name = nil
+    -- diagnostic: why the best servo-skull candidate got rejected this scan
+    local debug_servo = mod_settings.debug_mode and tag_name == TAG_NAMES.SERVO_SKULL_TAG
+    local servo_reject_reason = nil
+    local servo_reject_priority = -math.huge
+    local function note_servo_reject(reason, priority)
+        if debug_servo and priority > servo_reject_priority then
+            servo_reject_reason = reason
+            servo_reject_priority = priority
+        end
+    end
     -- init best unit for switch logic
     local marked_unit = marked_tag and marked_tag._target_unit
     if marked_unit then
@@ -553,6 +569,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         local marked_distance = marked_position and Vector3_distance(marked_position, ray_origin)
         best_unit_priority = breed_data and get_breed_priority(best_unit, breed_data, breed_priorities, marked_distance, distance_threshold) or 0
         best_unit_marked_by_execution_order = not not execution_order_units[best_unit]
+        best_unit_distance = marked_distance or math.huge
     end
 
     if type == "auto" then
@@ -587,7 +604,8 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             end
 
             -- priority depends on distance (close/far split around distance_threshold)
-            local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities, distance, distance_threshold) or 0
+            local hit_unit_priority, hit_unit_band = get_breed_priority(hit_unit, breed_data, breed_priorities, distance, distance_threshold)
+            hit_unit_priority = hit_unit_priority or 0
             -- filter unit by type and priority
             if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
                 goto continue
@@ -595,27 +613,34 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
 
             -- never servo-skull-mark a burster near the player or a teammate
             if tag_name == TAG_NAMES.SERVO_SKULL_TAG and BURSTER_BREEDS[breed_data.name] and is_burster_forbidden(POSITION_LOOKUP[hit_unit] or Unit_world_position(hit_unit, 1)) then
+                note_servo_reject("burster too close to player/teammate", hit_unit_priority)
                 goto continue
             end
 
             local hit_unit_marked_by_execution_order = not not execution_order_units[hit_unit]
-            if is_execution_order_priority then
-                if hit_unit_marked_by_execution_order == best_unit_marked_by_execution_order then
-                    if hit_unit_priority <= best_unit_priority then
-                        goto continue
-                    end
-                elseif best_unit_marked_by_execution_order then
-                    goto continue
-                end
+            -- Does this candidate beat the current best? Within the same tier,
+            -- a strictly higher priority always wins; on a priority tie the
+            -- nearer one wins -- but only between candidates. The incumbent
+            -- (best_unit == marked_unit) is displaced only by higher priority,
+            -- so an equal-priority switch can't cause target thrashing.
+            local beats
+            if is_execution_order_priority and hit_unit_marked_by_execution_order ~= best_unit_marked_by_execution_order then
+                beats = hit_unit_marked_by_execution_order
+            elseif hit_unit_priority > best_unit_priority then
+                beats = true
+            elseif hit_unit_priority == best_unit_priority and best_unit ~= marked_unit then
+                beats = distance < best_unit_distance
             else
-                if hit_unit_priority <= best_unit_priority then
-                    goto continue
-                end
+                beats = false
+            end
+            if not beats then
+                goto continue
             end
 
             local hit_unit_tag = smart_tag_system:unit_tag(hit_unit)
             -- filter unit by tag
             if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos, breed_data) then
+                note_servo_reject("tag validity (unaggroed / capacitance gate / existing mark)", hit_unit_priority)
                 goto continue
             end
 
@@ -627,6 +652,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             end
 
             if not visible then
+                note_servo_reject("skull has no line of sight (wall / smoke / force field / range)", hit_unit_priority)
                 goto continue
             end
 
@@ -634,12 +660,20 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             best_unit_tag = hit_unit_tag
             best_unit_priority = hit_unit_priority
             best_unit_marked_by_execution_order = hit_unit_marked_by_execution_order
+            best_unit_distance = distance
+            best_unit_band = hit_unit_band
+            best_unit_breed_name = breed_data.name
 
             ::continue::
         end
 
         if best_unit ~= marked_unit then
-            return best_unit, best_unit_tag
+            return best_unit, best_unit_tag, best_unit_breed_name, best_unit_priority, best_unit_band
+        end
+
+        -- servo skull found nothing new; report the top rejected candidate's gate
+        if debug_servo and servo_reject_reason and fixed_frame % 30 == 0 then
+            mod:print_debug("servo skull no target - top candidate blocked by:", servo_reject_reason)
         end
 
         return nil

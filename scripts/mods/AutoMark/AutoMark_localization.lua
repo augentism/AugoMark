@@ -682,6 +682,71 @@ local localization = {
         ["zh-cn"] = "自动标记 — 兵种优先级",
         ["zh-tw"] = "自動標記 — 兵種優先權",
     },
+    preset_editor_view_title = {
+        en = "Auto Mark — Priority Presets",
+        ["zh-cn"] = "自动标记 — 优先级预设",
+        ["zh-tw"] = "自動標記 — 優先權預設",
+    },
+    open_assignment_view = {
+        en = "Preset Assignment Menu Keybind",
+        ["zh-cn"] = "预设分配菜单快捷键",
+        ["zh-tw"] = "預設分配選單快捷鍵",
+    },
+    open_assignment_view_description = {
+        en = "Opens the menu for assigning priority presets to each class and editing class marking settings.",
+        ["zh-cn"] = "打开将优先级预设分配给各职业并编辑职业标记设置的菜单。",
+        ["zh-tw"] = "開啟將優先權預設分配給各職業並編輯職業標記設定的選單。",
+    },
+    assignment_view_title = {
+        en = "Auto Mark — Preset Assignment",
+        ["zh-cn"] = "自动标记 — 预设分配",
+        ["zh-tw"] = "自動標記 — 預設分配",
+    },
+    assignment_settings_header = {
+        en = "Class Settings",
+        ["zh-cn"] = "职业设置",
+        ["zh-tw"] = "職業設定",
+    },
+    assignment_preset_header = {
+        en = "Assigned Preset",
+        ["zh-cn"] = "分配的预设",
+        ["zh-tw"] = "分配的預設",
+    },
+    assignment_none = {
+        en = "(none)",
+        ["zh-cn"] = "（无）",
+        ["zh-tw"] = "（無）",
+    },
+    new_preset = {
+        en = "+ New Preset",
+        ["zh-cn"] = "+ 新预设",
+        ["zh-tw"] = "+ 新預設",
+    },
+    delete_preset = {
+        en = "Delete Preset",
+        ["zh-cn"] = "删除预设",
+        ["zh-tw"] = "刪除預設",
+    },
+    goto_assignments = {
+        en = "Assignments →",
+        ["zh-cn"] = "分配 →",
+        ["zh-tw"] = "分配 →",
+    },
+    goto_presets = {
+        en = "← Edit Presets",
+        ["zh-cn"] = "← 编辑预设",
+        ["zh-tw"] = "← 編輯預設",
+    },
+    assign_to_all_classes = {
+        en = "Assign to All Classes",
+        ["zh-cn"] = "分配给所有职业",
+        ["zh-tw"] = "分配給所有職業",
+    },
+    preset_assignment_count = {
+        en = "%d classes",
+        ["zh-cn"] = "%d 个职业",
+        ["zh-tw"] = "%d 個職業",
+    },
     distance_threshold = {
         en = "Close/Far Distance Threshold (m)",
         ["zh-cn"] = "近/远距离阈值（米）",
