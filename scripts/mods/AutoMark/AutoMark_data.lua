@@ -269,6 +269,25 @@ local widgets = {
                 decimals_number = 1
             },
             {
+                setting_id      = "medicae_assist_keybind",
+                type            = "keybind",
+                default_value   = {},
+                keybind_trigger = "pressed",
+                keybind_type    = "function_call",
+                function_name   = "medicae_assist",
+            },
+            {
+                setting_id    = "medicae_snap_speed",
+                type          = "numeric",
+                default_value = 900,
+                range         = { 90, 1440 },
+            },
+            {
+                setting_id    = "medicae_return_camera",
+                type          = "checkbox",
+                default_value = true,
+            },
+            {
                 setting_id      = "servo_skull_cancel_mark_time_threshold",
                 type            = "numeric",
                 default_value   = 0,

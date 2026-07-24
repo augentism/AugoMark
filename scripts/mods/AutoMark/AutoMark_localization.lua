@@ -697,6 +697,51 @@ local localization = {
         ["zh-cn"] = "当启用时，聚焦目标将不会标记未警觉的敌人。",
         ["zh-tw"] = "當啟用時，專注目標將不會標記未觸發警戒的敵人。",
     },
+    medicae_assist_keybind = {
+        en = "Medicae Skull Assist Keybind",
+        ["zh-cn"] = "医疗颅骨辅助快捷键",
+        ["zh-tw"] = "醫療顱骨輔助快捷鍵",
+    },
+    medicae_assist_keybind_description = {
+        en = "Wields the servo-skull order ability, snaps your camera onto the closest downed teammate, and issues the medicae (inject ally) order once the game locks the target. Press again to cancel.",
+        ["zh-cn"] = "自动使用伺服颅骨指令技能，将视角转向最近的倒地队友，并在游戏锁定目标后下达医疗（救助队友）指令。再按一次取消。",
+        ["zh-tw"] = "自動使用伺服顱骨指令技能，將視角轉向最近的倒地隊友，並在遊戲鎖定目標後下達醫療（救助隊友）指令。再按一次取消。",
+    },
+    medicae_snap_speed = {
+        en = "Medicae Assist Camera Speed (°/s)",
+        ["zh-cn"] = "医疗辅助视角转速（度/秒）",
+        ["zh-tw"] = "醫療輔助視角轉速（度/秒）",
+    },
+    medicae_return_camera = {
+        en = "Return Camera After Order",
+        ["zh-cn"] = "下达指令后恢复视角",
+        ["zh-tw"] = "下達指令後恢復視角",
+    },
+    medicae_return_camera_description = {
+        en = "After the medicae order is issued, steer the camera back to where it was pointing. Moving the mouse during the return hands control back immediately.",
+        ["zh-cn"] = "医疗指令下达后，将视角转回原来的方向。转回过程中移动鼠标会立即交还控制权。",
+        ["zh-tw"] = "醫療指令下達後，將視角轉回原來的方向。轉回過程中移動滑鼠會立即交還控制權。",
+    },
+    medicae_assist_no_skull = {
+        en = "Medicae assist: servo-skull with Inject Ally not available",
+        ["zh-cn"] = "医疗辅助：没有可用的救助队友伺服颅骨",
+        ["zh-tw"] = "醫療輔助：沒有可用的救助隊友伺服顱骨",
+    },
+    medicae_assist_no_target = {
+        en = "Medicae assist: no downed teammate in range",
+        ["zh-cn"] = "医疗辅助：范围内没有倒地的队友",
+        ["zh-tw"] = "醫療輔助：範圍內沒有倒地的隊友",
+    },
+    medicae_assist_busy = {
+        en = "Medicae assist: skull is already reviving an ally",
+        ["zh-cn"] = "医疗辅助：颅骨正在救助队友",
+        ["zh-tw"] = "醫療輔助：顱骨正在救助隊友",
+    },
+    medicae_assist_canceled = {
+        en = "Medicae assist canceled",
+        ["zh-cn"] = "医疗辅助已取消",
+        ["zh-tw"] = "醫療輔助已取消",
+    },
     copy_to_all_classes = {
         en = "Copy to All Classes",
         ["zh-cn"] = "复制到所有职业",

@@ -36,6 +36,8 @@ local mod_settings = {
     servo_skull_mark_keybind                 = mod:get("servo_skull_mark_keybind") or {},
     servo_skull_mark_ignore_unaggroed        = mod:get("servo_skull_mark_ignore_unaggroed") or false,
     servo_skull_burster_forbidden_range      = mod:get("servo_skull_burster_forbidden_range") or 0,
+    medicae_snap_speed                       = mod:get("medicae_snap_speed") or 900,
+    medicae_return_camera                    = mod:get("medicae_return_camera") or false,
     servo_skull_cancel_mark_time_threshold   = mod:get("servo_skull_cancel_mark_time_threshold") or 0,
     hack_mark_keybind                        = mod:get("hack_mark_keybind") or {},
     auto_hack                                = mod:get("auto_hack") or false,
@@ -288,6 +290,7 @@ mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/base_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/companion_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/focus_target_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/servo_skull_mark")
+mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/medicae_assist")
 
 -- Breed Priority View
 local function register_breed_priority_view()
