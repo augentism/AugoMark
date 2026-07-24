@@ -21,7 +21,7 @@ local AUTO_MARK_INTERVAL                   = 0.25
 
 -- set delay and interval for auto mark
 local function on_set_tag(tag_context)
-    mark_context.auto_mark_interval = AUTO_MARK_INTERVAL
+    -- mark_context.auto_mark_interval = AUTO_MARK_INTERVAL
     tag_context.delay = AUTO_MARK_DELAY
 end
 
@@ -130,6 +130,14 @@ mod:hook(CLASS.SmartTagSystem, "trigger_tag_interaction",
         return func(self, tag_id, interactor_unit, target_unit, optional_alternate)
     end)
 
+-- delay the plain enemy ping so it cannot fire right on top of a special mark
+local function delay_normal_tag()
+    local tag_context = mark_context[TAG_NAMES.ENEMY_TAG]
+    if tag_context.cooldown < 1 then
+        tag_context.cooldown = 1
+    end
+end
+
 -- Smart Tag Hook
 mod:hook_safe(CLASS.SmartTag, "init",
     function(self, tag_id, template, tagger_unit, target_unit, target_location, replies, is_server)
@@ -152,10 +160,10 @@ mod:hook_safe(CLASS.SmartTag, "init",
         -- check if the tag is manual
         if tag_context.manual_unit == target_unit then
             tag_context.is_manual = true
-            tag_context.manual_unit = nil
         else
             tag_context.is_manual = false
         end
+        tag_context.manual_unit = nil
 
         if tag_name == TAG_NAMES.COMPANION_TAG then
             tag_context.pounce_start_time = nil
@@ -174,12 +182,14 @@ mod:hook_safe(CLASS.SmartTag, "init",
                     tag_context.is_cancelable = mod_settings.companion_cancel_mark_non_human
                 end
             end
+            delay_normal_tag()
         elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
             if context.has_noospheric_command then
                 tag_context.noospheric_command_next_time = mod:get_latest_fixed_time() + noospheric_command_duration
             else
                 tag_context.noospheric_command_next_time = math.huge
             end
+            delay_normal_tag()
         end
     end)
 

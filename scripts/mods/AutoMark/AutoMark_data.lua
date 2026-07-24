@@ -391,6 +391,11 @@ local widgets = {
                 default_value = false,
             },
             {
+                setting_id    = "focus_target_ignore_unaggroed",
+                type          = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id    = "focus_target_overwrite_delta",
                 type          = "numeric",
                 default_value = 5,

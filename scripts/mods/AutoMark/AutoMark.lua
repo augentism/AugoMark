@@ -50,6 +50,7 @@ local mod_settings = {
     noospheric_command_boost_boss            = mod:get("noospheric_command_boost_boss") or false,
     focus_target_overwrite                   = mod:get("focus_target_overwrite") or false,
     focus_target_overwrite_delta             = mod:get("focus_target_overwrite_delta") or 5,
+    focus_target_ignore_unaggroed            = mod:get("focus_target_ignore_unaggroed") or false,
     focus_target_switch                      = mod:get("focus_target_switch") or false,
     focus_target_switch_melee                = mod:get("focus_target_switch_melee") or false,
     focus_target_switch_range                = mod:get("focus_target_switch_range") or false,
@@ -178,50 +179,62 @@ end
 ---@class AutoMarkMarkContext
 local mark_context                       = {
     auto_mark_interval          = 0,
-    execution_order_units       = {},
-    [TAG_NAMES.ENEMY_TAG]       = {
-        tag         = nil,
-        cooldown    = 0,
-        delay       = 0,
-        manual_unit = nil,
-        is_manual   = false,
-    },
-    [TAG_NAMES.VETERAN_TAG]     = {
-        tag         = nil,
-        cooldown    = 0,
-        delay       = 0,
-        manual_unit = nil,
-        is_manual   = false,
-    },
-    [TAG_NAMES.COMPANION_TAG]   = {
-        tag               = nil,
-        cooldown          = 0,
-        delay             = 0,
-        manual_unit       = nil,
-        is_manual         = false,
-        pounce_start_time = nil,
-        is_cancelable     = false,
-        canceled_unit     = nil,
-    },
-    [TAG_NAMES.SERVO_SKULL_TAG] = {
-        tag                          = nil,
-        cooldown                     = 0,
-        delay                        = 0,
-        manual_unit                  = nil,
-        is_manual                    = false,
-        noospheric_command_next_time = math.huge,
-        servo_skull_lose_sight_time  = nil,
-    },
+    execution_order_units       = setmetatable({}, { __mode = "k" }),
+    [TAG_NAMES.ENEMY_TAG]       = setmetatable(
+        {
+            tag         = nil,
+            cooldown    = 0,
+            delay       = 0,
+            manual_unit = nil,
+            is_manual   = false,
+        },
+        { __mode = "v" }
+    ),
+    [TAG_NAMES.VETERAN_TAG]     = setmetatable(
+        {
+            tag         = nil,
+            cooldown    = 0,
+            delay       = 0,
+            manual_unit = nil,
+            is_manual   = false,
+        },
+        { __mode = "v" }
+    ),
+    [TAG_NAMES.COMPANION_TAG]   = setmetatable(
+        {
+            tag               = nil,
+            cooldown          = 0,
+            delay             = 0,
+            manual_unit       = nil,
+            is_manual         = false,
+            pounce_start_time = nil,
+            is_cancelable     = false,
+            canceled_unit     = nil,
+        },
+        { __mode = "v" }
+    ),
+    [TAG_NAMES.SERVO_SKULL_TAG] = setmetatable(
+        {
+            tag                          = nil,
+            cooldown                     = 0,
+            delay                        = 0,
+            manual_unit                  = nil,
+            is_manual                    = false,
+            noospheric_command_next_time = math.huge,
+            servo_skull_lose_sight_time  = nil,
+        },
+        { __mode = "v" }
+    ),
 }
 mod.mark_context                         = mark_context
 
 -- Enemy Visbility Check
-local visibility_cache                   = {}
-local visibility_check_frame             = {}
+local visibility_cache                   = setmetatable({}, { __mode = "k" })
+local visibility_check_frame             = setmetatable({}, { __mode = "k" })
 mod.visibility_cache                     = visibility_cache
 mod.visibility_check_frame               = visibility_check_frame
-local servo_skull_visibility_cache       = {}
-local servo_skull_visibility_check_frame = {}
+local servo_skull_visibility_cache       = setmetatable({}, { __mode = "k" })
+local servo_skull_visibility_check_frame = setmetatable({}, { __mode = "k" })
 mod.servo_skull_visibility_cache         = servo_skull_visibility_cache
 mod.servo_skull_visibility_check_frame   = servo_skull_visibility_check_frame
 
@@ -489,10 +502,6 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     local tag_context = mark_context[tag_name]
     local class_settings = mod:get_class_settings(tag_name)
-    if not class_settings.toggle_class then
-        return false
-    end
-
     local marked_tag = tag_context.tag
     local marked_tag_is_manual = tag_context.is_manual
     -- mark when cooldown is zero
@@ -503,7 +512,7 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
     local is_execution_order_priority = mod_settings.execution_order_priority and tag_name == TAG_NAMES.COMPANION_TAG and context.has_execution_order
 
     local target_unit, target_tag
-    if class_settings.override_manual or not marked_tag_is_manual then
+    if class_settings.toggle_class and (class_settings.override_manual or not marked_tag_is_manual) then
         if is_cooldown_ready then
             target_unit, target_tag = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
         elseif is_priority_switch or is_execution_order_priority and marked_tag then
@@ -598,15 +607,17 @@ local function auto_mark(dt, t, fixed_frame)
 end
 
 local function clean_visibility_cache(fixed_frame)
-    if fixed_frame % 20 == 0 then
+    -- caches are weak-keyed, so this sweep is just a slow backstop
+    if fixed_frame % 3120 == 0 then
+        local frame_threshold = fixed_frame - 5
         for cached_unit, check_frame in pairs(visibility_check_frame) do
-            if fixed_frame - check_frame > 5 then
+            if check_frame < frame_threshold then
                 visibility_cache[cached_unit] = nil
                 visibility_check_frame[cached_unit] = nil
             end
         end
         for cached_unit, check_frame in pairs(servo_skull_visibility_check_frame) do
-            if fixed_frame - check_frame > 5 then
+            if check_frame < frame_threshold then
                 servo_skull_visibility_cache[cached_unit] = nil
                 servo_skull_visibility_check_frame[cached_unit] = nil
             end

@@ -27,11 +27,11 @@ local function focus_target_switch_callback(is_melee)
     if is_melee then
         target_unit, target_tag = mod:find_target_unit_custom("focus_target_melee", 0, MELEE_RANGE, tag_name)
     else
-        target_unit = mod:find_target_unit()
+        target_unit = mod:find_target_unit(true)
     end
 
     target_tag = target_tag or smart_tag_system:unit_tag(target_unit)
-    if not target_unit or not mod:is_target_valid(tag_name, target_tag, target_unit) then
+    if not target_unit or not mod:can_focus_target_overwrite(target_unit, target_tag) then
         return
     end
 

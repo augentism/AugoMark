@@ -198,7 +198,7 @@ local find_hackable_target_unit = function()
 end
 
 function mod:auto_hack(dt, t, fixed_frame)
-    if not mod_settings.auto_hack or (mod_settings.disable_auto_hack_for_noospheric_command and context.has_noospheric_command) or context.class_name ~= "cryptic" or not context.has_servo_skull or mod:is_servo_skull_hacking() then
+    if not mod_settings.toggle_mod or not mod_settings.auto_hack or (mod_settings.disable_auto_hack_for_noospheric_command and context.has_noospheric_command) or context.class_name ~= "cryptic" or not context.has_servo_skull or mod:is_servo_skull_hacking() then
         return
     end
 
@@ -235,7 +235,7 @@ function mod:auto_hack(dt, t, fixed_frame)
 end
 
 function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
-    if mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or context.class_name ~= "cryptic" or not context.has_servo_skull then
+    if not mod_settings.toggle_mod or mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or context.class_name ~= "cryptic" or not context.has_servo_skull then
         return
     end
 
