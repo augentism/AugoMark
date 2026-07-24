@@ -215,6 +215,24 @@ local function is_burster_forbidden(target_position)
     return false
 end
 
+-- true when this unit is a burster currently inside the forbidden radius
+local function is_burster_unit_forbidden(target_unit)
+    local unit_data_extension = ScriptUnit_extension(target_unit, "unit_data_system")
+    local breed_data = unit_data_extension and unit_data_extension._breed
+    if not breed_data or not BURSTER_BREEDS[breed_data.name] then
+        return false
+    end
+    return is_burster_forbidden(POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1))
+end
+
+function mod:is_burster_mark_forbidden(target_unit)
+    if not target_unit or not HEALTH_ALIVE[target_unit] then
+        return false
+    end
+    local ok, forbidden = pcall(is_burster_unit_forbidden, target_unit)
+    return ok and forbidden or false
+end
+
 -- Check if Target Unit's Breed is Valid for Auto-Mark
 local function is_breed_valid(breed_data, class_settings)
     if not breed_data or not class_settings then
@@ -570,6 +588,13 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         best_unit_priority = breed_data and get_breed_priority(best_unit, breed_data, breed_priorities, marked_distance, distance_threshold) or 0
         best_unit_marked_by_execution_order = not not execution_order_units[best_unit]
         best_unit_distance = marked_distance or math.huge
+        -- a marked burster that has since drifted inside the forbidden radius
+        -- must lose to any other candidate so the scan can switch away from it
+        -- (if nothing else is available, auto_cancel_servo_skull_mark drops it)
+        if tag_name == TAG_NAMES.SERVO_SKULL_TAG and breed_data and BURSTER_BREEDS[breed_data.name]
+            and is_burster_forbidden(marked_position) then
+            best_unit_priority = 0
+        end
     end
 
     if type == "auto" then

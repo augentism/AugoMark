@@ -235,19 +235,27 @@ function mod:auto_hack(dt, t, fixed_frame)
 end
 
 function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
-    if not mod_settings.toggle_mod or mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or context.class_name ~= "cryptic" or not context.has_servo_skull then
+    if not mod_settings.toggle_mod or context.class_name ~= "cryptic" or not context.has_servo_skull then
         return
     end
-
 
     local tag_context = mark_context[TAG_NAMES.SERVO_SKULL_TAG]
-    if tag_context.is_manual then
-        return
-    end
-
     local marked_tag = tag_context.tag
     local marked_unit = marked_tag and marked_tag._target_unit
     if not marked_tag or not marked_unit then
+        return
+    end
+
+    -- Safety first: a marked burster that walked into the forbidden radius of
+    -- the player or a teammate is dropped immediately, even for manual marks
+    -- and regardless of the lose-sight threshold setting.
+    if mod:is_burster_mark_forbidden(marked_unit) then
+        mod:print_debug("cancel servo skull mark: burster entered forbidden range")
+        mod:cancel_mark(marked_tag._id)
+        return
+    end
+
+    if mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or tag_context.is_manual then
         return
     end
 
