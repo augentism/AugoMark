@@ -280,7 +280,7 @@ local widgets = {
                 setting_id    = "medicae_snap_speed",
                 type          = "numeric",
                 default_value = 900,
-                range         = { 90, 1440 },
+                range         = { 90, 10000 },
             },
             {
                 setting_id    = "medicae_return_camera",

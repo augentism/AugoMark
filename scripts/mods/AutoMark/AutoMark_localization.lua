@@ -722,10 +722,15 @@ local localization = {
         ["zh-cn"] = "医疗指令下达后，将视角转回原来的方向。转回过程中移动鼠标会立即交还控制权。",
         ["zh-tw"] = "醫療指令下達後，將視角轉回原來的方向。轉回過程中移動滑鼠會立即交還控制權。",
     },
+    medicae_assist_no_talent = {
+        en = "Medicae assist: Inject Ally servo-skull talent not equipped",
+        ["zh-cn"] = "医疗辅助：未装备救助队友伺服颅骨天赋",
+        ["zh-tw"] = "醫療輔助：未裝備救助隊友伺服顱骨天賦",
+    },
     medicae_assist_no_skull = {
-        en = "Medicae assist: servo-skull with Inject Ally not available",
-        ["zh-cn"] = "医疗辅助：没有可用的救助队友伺服颅骨",
-        ["zh-tw"] = "醫療輔助：沒有可用的救助隊友伺服顱骨",
+        en = "Medicae assist: servo-skull unit not found (check debug log)",
+        ["zh-cn"] = "医疗辅助：未找到伺服颅骨单位（请查看调试日志）",
+        ["zh-tw"] = "醫療輔助：未找到伺服顱骨單位（請查看除錯日誌）",
     },
     medicae_assist_no_target = {
         en = "Medicae assist: no downed teammate in range",

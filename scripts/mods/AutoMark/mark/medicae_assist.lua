@@ -21,16 +21,21 @@ local servo_skull_states          = CompanionServoSkullSettings.STATES
 local MAX_TARGET_RANGE            = CompanionServoSkullSettings.max_target_distance_range or 25
 
 -- Global Cache
-local ALIVE                       = ALIVE
+-- (ALIVE is not cached: the game creates that global at gameplay start,
+-- after mod files have loaded, so a load-time capture would be nil)
 local HEALTH_ALIVE                = HEALTH_ALIVE
-local POSITION_LOOKUP             = POSITION_LOOKUP
 local Managers                    = Managers
 local ScriptUnit                  = ScriptUnit
 local Unit                        = Unit
 local Vector3                     = Vector3
+local Quaternion                  = Quaternion
+local World                       = World
+local PhysicsWorld                = PhysicsWorld
 local GameSession                 = GameSession
 local CLASS                       = CLASS
 local PI, TWO_PI                  = math.pi, math.pi * 2
+
+local LOS_COLLISION_FILTER        = "filter_interactable_line_of_sight_marker_check"
 
 -- the game confirms the order when the aim action sees hold == false, and
 -- cancels it when action_two is pressed while still holding
@@ -76,16 +81,19 @@ local function cancel_assist()
     end
 end
 
+-- returns skull or nil + failure reason ("no_talent" | "no_skull")
 local function get_medicae_skull(player_unit)
     local talent_extension = ScriptUnit.has_extension(player_unit, "talent_system")
     if not talent_extension or not talent_extension:has_special_rule(special_rules.cryptic_servo_skull_inject_ally) then
-        return nil
+        return nil, "no_talent"
     end
 
     local companion_spawner_extension = context.companion_spawner_extension
+        or ScriptUnit.has_extension(player_unit, "companion_spawner_system")
     local skull = companion_spawner_extension and companion_spawner_extension:spawned_unit_lookup(special_rules.cryptic_servo_skull_inject_ally)
     if not skull or not ALIVE[skull] then
-        return nil
+        mod:print_debug("medicae assist: spawner ext", companion_spawner_extension ~= nil, "skull", skull ~= nil, "alive", skull and ALIVE[skull] or false)
+        return nil, "no_skull"
     end
 
     return skull
@@ -102,22 +110,67 @@ local function is_skull_reviving(skull)
     return state == servo_skull_states.inject_ally
 end
 
-local function find_best_ally(player_unit, skull, from_position)
+local function read_camera(player)
+    local camera_manager = Managers.state.camera
+    local viewport_name = player.viewport_name
+    local position = camera_manager:camera_position(viewport_name)
+    local rotation = camera_manager:camera_rotation(viewport_name)
+    return position, Quaternion.forward(rotation)
+end
+
+local function level_physics_world()
+    local world = Managers.world:world("level_world")
+    return world and World.physics_world(world)
+end
+
+-- Unit.world_position, not POSITION_LOOKUP: the keybind runs outside the
+-- fixed frame, where lookup vectors can be stale
+local function ally_target_position(ally)
+    if Unit.has_node(ally, "j_spine") then
+        return Unit.world_position(ally, Unit.node(ally, "j_spine"))
+    end
+    return Unit.world_position(ally, 1) + Vector3(0, 0, 0.3)
+end
+
+local function has_line_of_sight(physics_world, from_position, to_position)
+    local to_target = to_position - from_position
+    local distance = Vector3.length(to_target)
+    if distance < 0.05 then
+        return true
+    end
+
+    -- stop slightly short of the body so the ally's own collision cannot block
+    local hit = PhysicsWorld.raycast(physics_world, from_position, to_target / distance, distance - 0.2, "closest", "collision_filter", LOS_COLLISION_FILTER)
+    return not hit
+end
+
+-- Picks the ally closest to the center of view among those the camera can
+-- actually see; allies without line of sight are ignored entirely.
+local function find_best_ally(player_unit, skull, cam_position, cam_forward)
     local ability_extension = ScriptUnit.has_extension(player_unit, "ability_system")
     if not ability_extension then
         return nil
     end
 
-    local best, best_distance
+    local physics_world = level_physics_world()
+    if not physics_world then
+        return nil
+    end
+
+    local best, best_dot
     for _, player in pairs(Managers.player:players()) do
         local target_unit = player.player_unit
         if target_unit and target_unit ~= player_unit and HEALTH_ALIVE[target_unit] then
             local valid = CompanionServoSkullAbility.validate_target_func_inject_ally_ability(target_unit, ability_extension, skull)
             if valid then
-                local target_position = POSITION_LOOKUP[target_unit]
-                local distance = target_position and Vector3.distance(from_position, target_position)
-                if distance and distance <= MAX_TARGET_RANGE and (not best_distance or distance < best_distance) then
-                    best, best_distance = target_unit, distance
+                local target_position = ally_target_position(target_unit)
+                local to_target = target_position - cam_position
+                local distance = Vector3.length(to_target)
+                if distance <= MAX_TARGET_RANGE and has_line_of_sight(physics_world, cam_position, target_position) then
+                    local dot = Vector3.dot(cam_forward, to_target / math.max(distance, 0.05))
+                    if not best_dot or dot > best_dot then
+                        best, best_dot = target_unit, dot
+                    end
                 end
             end
         end
@@ -130,7 +183,7 @@ end
 mod.medicae_assist = function()
     if assist_phase then
         cancel_assist()
-        mod:notify(mod:localize("medicae_assist_canceled"))
+        mod:print_debug(mod:localize("medicae_assist_canceled"))
         return
     end
 
@@ -144,21 +197,25 @@ mod.medicae_assist = function()
         return
     end
 
-    local skull = get_medicae_skull(player_unit)
+    local skull, reason = get_medicae_skull(player_unit)
     if not skull then
-        mod:notify(mod:localize("medicae_assist_no_skull"))
+        mod:print_debug(mod:localize(reason == "no_talent" and "medicae_assist_no_talent" or "medicae_assist_no_skull"))
         return
     end
 
     if is_skull_reviving(skull) then
-        mod:notify(mod:localize("medicae_assist_busy"))
+        mod:print_debug(mod:localize("medicae_assist_busy"))
         return
     end
 
-    local from_position = POSITION_LOOKUP[player_unit] or Unit.world_position(player_unit, 1)
-    local ally = find_best_ally(player_unit, skull, from_position)
+    local camera_ok, cam_position, cam_forward = pcall(read_camera, player)
+    if not camera_ok or not cam_position then
+        return
+    end
+
+    local ally = find_best_ally(player_unit, skull, cam_position, cam_forward)
     if not ally then
-        mod:notify(mod:localize("medicae_assist_no_target"))
+        mod:print_debug(mod:localize("medicae_assist_no_target"))
         return
     end
 
@@ -213,20 +270,17 @@ local function assist_aim_body(self, main_dt)
         return
     end
 
-    local ally = find_best_ally(player_unit, skull, cam_position)
+    local orientation = self._orientation
+    local cos_pitch = math.cos(orientation.pitch)
+    local cam_forward = Vector3(-cos_pitch * math.sin(orientation.yaw), cos_pitch * math.cos(orientation.yaw), math.sin(orientation.pitch))
+
+    local ally = find_best_ally(player_unit, skull, cam_position, cam_forward)
     if not ally then
         cancel_assist()
         return
     end
 
-    local target_position
-    if Unit.has_node(ally, "j_spine") then
-        target_position = Unit.world_position(ally, Unit.node(ally, "j_spine"))
-    else
-        target_position = POSITION_LOOKUP[ally] + Vector3(0, 0, 0.3)
-    end
-
-    local orientation = self._orientation
+    local target_position = ally_target_position(ally)
     local direction = Vector3.normalize(target_position - cam_position)
     local wanted_yaw = math.mod_two_pi(math.atan2(direction.y, direction.x) - PI * 0.5)
     local wanted_pitch = math.mod_two_pi(math.asin(direction.z))

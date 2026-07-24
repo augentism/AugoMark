@@ -21,7 +21,8 @@ local special_rules                                    = SpecialRulesSettings.sp
 -- Global Cache
 local CLASS                                            = CLASS
 local HEALTH_ALIVE                                     = HEALTH_ALIVE
-local ALIVE                                            = ALIVE
+-- ALIVE is deliberately not cached: that global appears at gameplay start,
+-- after mod load, so a load-time capture would be nil
 local Managers                                         = Managers
 local GameSession                                      = GameSession
 local PhysicsWorld                                     = PhysicsWorld
