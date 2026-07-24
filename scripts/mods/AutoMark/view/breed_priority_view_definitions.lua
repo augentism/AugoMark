@@ -67,12 +67,14 @@ local scenegraph_definition  = {
         position             = { 24, 0, 1 },
     },
 
+    -- sits beside the threshold slider, clear of the class list so clicks
+    -- cannot fall through onto a (masked but still interactive) class row
     copy_button = {
         vertical_alignment   = "top",
-        parent               = "class_panel",
+        parent               = "screen",
         horizontal_alignment = "left",
-        size                 = { class_grid_size[1], 44 },
-        position             = { 0, class_grid_size[2] + 16, 2 },
+        size                 = { far_grid_size[1], 44 },
+        position             = { FAR_X, PANEL_TOP - 40, 2 },
     },
 
     -- title
