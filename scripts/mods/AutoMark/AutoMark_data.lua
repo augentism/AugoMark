@@ -184,20 +184,7 @@ local widgets = {
         type = "group",
         sub_widgets = {
             {
-                setting_id      = "companion_mark_keybind",
-                type            = "keybind",
-                default_value   = {},
-                keybind_trigger = "pressed",
-                keybind_type    = "function_call",
-                function_name   = "companion_mark",
-            },
-            {
                 setting_id    = "companion_mark_ignore_unaggroed",
-                type          = "checkbox",
-                default_value = false,
-            },
-            {
-                setting_id    = "execution_order_priority",
                 type          = "checkbox",
                 default_value = false,
             },
@@ -206,6 +193,19 @@ local widgets = {
                 type          = "numeric",
                 default_value = 0,
                 range         = { 0, 100 },
+            },
+            {
+                setting_id      = "companion_mark_keybind",
+                type            = "keybind",
+                default_value   = {},
+                keybind_trigger = "pressed",
+                keybind_type    = "function_call",
+                function_name   = "companion_mark",
+            },
+            {
+                setting_id    = "execution_order_priority",
+                type          = "checkbox",
+                default_value = false,
             },
             {
                 setting_id    = "companion_cancel_mark",
@@ -295,14 +295,6 @@ local widgets = {
         type = "group",
         sub_widgets = {
             {
-                setting_id      = "servo_skull_mark_keybind",
-                type            = "keybind",
-                default_value   = {},
-                keybind_trigger = "pressed",
-                keybind_type    = "function_call",
-                function_name   = "servo_skull_mark",
-            },
-            {
                 setting_id    = "servo_skull_mark_ignore_unaggroed",
                 type          = "checkbox",
                 default_value = false,
@@ -313,6 +305,14 @@ local widgets = {
                 default_value   = 0,
                 range           = { 0, 25 },
                 decimals_number = 1
+            },
+            {
+                setting_id      = "servo_skull_mark_keybind",
+                type            = "keybind",
+                default_value   = {},
+                keybind_trigger = "pressed",
+                keybind_type    = "function_call",
+                function_name   = "servo_skull_mark",
             },
             {
                 setting_id      = "hack_mark_keybind",
@@ -424,6 +424,11 @@ local widgets = {
         setting_id  = "veteran_settings",
         type        = "group",
         sub_widgets = {
+            {
+                setting_id    = "focus_target_ignore_unaggroed",
+                type          = "checkbox",
+                default_value = false,
+            },
             {
                 setting_id    = "focus_target_overwrite",
                 type          = "checkbox",

@@ -27,11 +27,11 @@ local function focus_target_switch_callback(is_melee)
     if is_melee then
         target_unit, target_tag = mod:find_target_unit_custom("focus_target_melee", 0, MELEE_RANGE, tag_name)
     else
-        target_unit = mod:find_target_unit()
+        target_unit = mod:find_target_unit(true)
     end
 
     target_tag = target_tag or smart_tag_system:unit_tag(target_unit)
-    if not target_unit or not mod:is_target_valid(tag_name, target_tag, target_unit) then
+    if not target_unit or not mod:can_focus_target_overwrite(target_unit, target_tag) then
         return
     end
 
@@ -49,7 +49,7 @@ local function focus_target_switch(is_melee)
 end
 
 local MELEE_ACTION_KINDS = {
-    windup = true,
+    -- windup = true,
     sweep = true,
 }
 local RANGED_ACTION_KINDS = {
@@ -60,9 +60,14 @@ local RANGED_ACTION_KINDS = {
 }
 mod:hook_safe(CLASS.ActionHandler, "start_action",
     function(self, id, action_objects, action_name, action_params, action_settings, used_input, t, transition_type, condition_func_params, automatic_input, reset_combo_override)
-        if not mod_settings.focus_target_switch
-            or self._unit_data_extension._player.viewport_name ~= 'player1'
+        if self._unit_data_extension._player.viewport_name ~= 'player1' then
+            return
+        end
+
+        if not mod_settings.toggle_mod
+            or not mod_settings.focus_target_switch
             or id ~= "weapon_action"
+            or mark_context.auto_mark_interval > 0
             or mark_context[TAG_NAMES.VETERAN_TAG].delay > 0
         then
             return

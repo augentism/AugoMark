@@ -123,7 +123,7 @@ function mod:init_execution_order_units()
 end
 
 function mod:auto_cancel_companion_mark(t)
-    if not mod_settings.companion_cancel_mark or context.class_name ~= "adamant" or not context.has_companion then
+    if not mod_settings.toggle_mod or not mod_settings.companion_cancel_mark or context.class_name ~= "adamant" or not context.has_companion then
         return
     end
 

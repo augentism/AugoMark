@@ -508,6 +508,16 @@ local localization = {
         ["zh-cn"] = "聚焦目标覆盖最小层数差",
         ["zh-tw"] = "專注目標覆蓋最小層數差",
     },
+    focus_target_ignore_unaggroed = {
+        en = "Ignore Unalerted Enemies",
+        ["zh-cn"] = "忽略未警觉的敌人",
+        ["zh-tw"] = "忽略未觸發警戒的敵人",
+    },
+    focus_target_ignore_unaggroed_description = {
+        en = "When enabled, Focus Target will not mark enemies that are not alerted.",
+        ["zh-cn"] = "当启用时，聚焦目标将不会标记未警觉的敌人。",
+        ["zh-tw"] = "當啟用時，專注目標將不會標記未觸發警戒的敵人。",
+    },
     focus_target_switch = {
         en = "Switch Target on Attack",
         ["zh-cn"] = "攻击时切换目标",

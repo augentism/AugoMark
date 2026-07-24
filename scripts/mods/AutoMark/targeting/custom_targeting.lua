@@ -116,18 +116,59 @@ local function is_breed_valid(breed_data, class_settings)
     end
 end
 
+local function can_focus_target_overwrite(target_unit, target_tag)
+    local target_buff_extension = ScriptUnit_extension(target_unit, "buff_system")
+    if not target_buff_extension then
+        return false
+    end
+
+    local focus_target_debuff = target_buff_extension._stacking_buffs["veteran_improved_tag_debuff"]
+    local target_stack_count = focus_target_debuff and focus_target_debuff:stack_count() or 0
+    local target_tag_name = target_tag and target_tag._template.name
+    -- target does not have focus target debuff
+    if target_tag_name ~= TAG_NAMES.VETERAN_TAG and target_stack_count <= 0 then
+        return true
+    end
+
+    -- latency bug
+    if target_tag_name == TAG_NAMES.VETERAN_TAG and target_stack_count <= 0 then
+        return false
+    end
+
+    -- focus_target_overwrite not enabled
+    if not mod_settings.focus_target_overwrite then
+        return false
+    end
+
+    local talent_resource_component = context.talent_resource_component
+    if not talent_resource_component then
+        return false
+    end
+
+    -- check if player's buff stacks greater than target's debuff stacks
+    local player_stack_count = talent_resource_component.current_resource or 0
+    if player_stack_count <= target_stack_count then
+        return false
+    end
+
+    if player_stack_count == context.focus_target_max_stacks or player_stack_count - target_stack_count >= mod_settings.focus_target_overwrite_delta then
+        return true
+    end
+end
+
 -- Check if Tagged Target Unit can be Marked with Current Tag
 local function is_target_valid(tag_name, target_tag, target_unit, target_position, target_breed_data)
     if tag_name == TAG_NAMES.COMPANION_TAG then
         -- arbite shouldn't mark any arbite's prey or veteran's prey
         local target_tag_name = target_tag and target_tag._template.name
-        local is_boss = target_breed_data and target_breed_data.is_boss
-        if is_boss then
-            if target_tag_name == TAG_NAMES.VETERAN_TAG then
+        local pounce_setting = target_breed_data and target_breed_data.companion_pounce_setting
+        local pounce_action = pounce_setting and pounce_setting.companion_pounce_action
+        if pounce_action == "human" then
+            if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG then
                 return false
             end
         else
-            if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
+            if target_tag_name == TAG_NAMES.VETERAN_TAG then
                 return false
             end
         end
@@ -157,54 +198,15 @@ local function is_target_valid(tag_name, target_tag, target_unit, target_positio
             return true
         end
     elseif tag_name == TAG_NAMES.VETERAN_TAG then
-        local target_buff_extension = ScriptUnit_extension(target_unit, "buff_system")
-        if not target_buff_extension then
+        if mod_settings.focus_target_ignore_unaggroed and not is_target_aggroed(target_unit) then
             return false
         end
 
-        local focus_target_debuff = target_buff_extension._stacking_buffs["veteran_improved_tag_debuff"]
-        local target_stack_count = focus_target_debuff and focus_target_debuff:stack_count() or 0
-        local target_tag_name = target_tag and target_tag._template.name
-        -- target does not have focus target debuff
-        if target_tag_name ~= TAG_NAMES.VETERAN_TAG and target_stack_count <= 0 then
-            return true
-        end
-
-        -- latency bug
-        if target_tag_name == TAG_NAMES.VETERAN_TAG and target_stack_count <= 0 then
-            return false
-        end
-
-        -- focus_target_overwrite not enabled
-        if not mod_settings.focus_target_overwrite then
-            return false
-        end
-
-        local talent_resource_component = context.talent_resource_component
-        if not talent_resource_component then
-            return false
-        end
-
-        -- check if player's buff stacks greater than target's debuff stacks
-        local player_stack_count = talent_resource_component.current_resource or 0
-        if player_stack_count <= target_stack_count then
-            return false
-        end
-
-        if player_stack_count == context.focus_target_max_stacks or player_stack_count - target_stack_count >= mod_settings.focus_target_overwrite_delta then
-            return true
-        end
+        return can_focus_target_overwrite(target_unit, target_tag)
     elseif tag_name == TAG_NAMES.SERVO_SKULL_TAG then
         local target_tag_name = target_tag and target_tag._template.name
-        local is_boss = target_breed_data and target_breed_data.is_boss
-        if is_boss then
-            if target_tag_name == TAG_NAMES.VETERAN_TAG then
-                return false
-            end
-        else
-            if target_tag_name == TAG_NAMES.COMPANION_TAG or target_tag_name == TAG_NAMES.VETERAN_TAG or target_tag_name == TAG_NAMES.SERVO_SKULL_TAG then
-                return false
-            end
+        if target_tag_name == TAG_NAMES.VETERAN_TAG then
+            return false
         end
 
         if mod_settings.servo_skull_mark_ignore_unaggroed and not is_target_aggroed(target_unit) then
@@ -539,6 +541,10 @@ end
 
 function mod:is_servo_skull_target_visible(target_unit, fixed_frame)
     return is_servo_skull_target_visible(target_unit, fixed_frame)
+end
+
+function mod:can_focus_target_overwrite(target_unit, target_tag)
+    return can_focus_target_overwrite(target_unit, target_tag)
 end
 
 function mod:is_noospheric_command_boost_breed_valid(target_unit)
