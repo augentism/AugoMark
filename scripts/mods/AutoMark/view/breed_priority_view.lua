@@ -27,6 +27,11 @@ local THRESHOLD_MIN, THRESHOLD_MAX = 1, 60
 -- breed's (the Havoc Dreg Ritualist behaves differently enough to tune apart)
 local MUTATOR_ALIAS_EXCEPTIONS     = { chaos_mutator_ritualist = true }
 
+-- Extra per-state priority entries shown as their own rows after the base breed
+local EXTRA_PRIORITY_VARIANTS      = {
+    chaos_mutator_ritualist = { "chaos_mutator_ritualist_half", "chaos_mutator_ritualist_full" },
+}
+
 local BreedPriorityView = class("BreedPriorityView", "BaseView")
 
 -- ===== Breed list =====
@@ -105,6 +110,9 @@ local function build_breed_categories()
                 if all_keys[passive] and not is_aliased[passive] then
                     entries[#entries + 1] = passive
                 end
+                for _, variant in ipairs(EXTRA_PRIORITY_VARIANTS[breed_name] or {}) do
+                    entries[#entries + 1] = variant
+                end
             end
         end
         if #entries > 0 then
@@ -163,6 +171,11 @@ BreedPriorityView.on_enter = function(self)
     for _, leg in ipairs(self._definitions.legend_inputs) do
         local cb = leg.on_pressed_callback and callback(self, leg.on_pressed_callback)
         self._input_legend_element:add_entry(leg.display_name, leg.input_action, nil, cb, leg.alignment)
+    end
+
+    local copy_button = self._widgets_by_name.copy_button
+    if copy_button then
+        copy_button.content.hotspot.pressed_callback = callback(self, "cb_copy_to_all_pressed")
     end
 
     self:_build_threshold_slider()
@@ -416,6 +429,29 @@ end
 
 BreedPriorityView.cb_on_class_pressed = function(self, widget, entry)
     self:_select(entry.id)
+end
+
+-- Copies the selected class's distance threshold and breed priorities to
+-- every other class context. Other class settings (cooldown, ranges,
+-- toggles) are left alone; the DMF options apply button covers those.
+BreedPriorityView.cb_copy_to_all_pressed = function(self)
+    local source = self:_selected_class_settings()
+    if not source then
+        return
+    end
+
+    for _, class_name in ipairs(mod:get_priority_class_names()) do
+        if class_name ~= self._selected_class then
+            local dest = mod:get_class_settings_by_name(class_name)
+            if dest then
+                dest.distance_threshold = source.distance_threshold
+                dest.breed_priorities = table.clone(source.breed_priorities)
+            end
+        end
+    end
+
+    mod:set("auto_mark_settings", mod.auto_mark_settings, false)
+    mod:echo(mod:localize("copied_to_all_classes") .. ": " .. mod:localize(self._selected_class))
 end
 
 BreedPriorityView.cb_on_back_pressed = function(self)

@@ -687,6 +687,16 @@ local localization = {
         ["zh-cn"] = "近/远距离阈值（米）",
         ["zh-tw"] = "近/遠距離門檻（公尺）",
     },
+    copy_to_all_classes = {
+        en = "Copy to All Classes",
+        ["zh-cn"] = "复制到所有职业",
+        ["zh-tw"] = "複製到所有職業",
+    },
+    copied_to_all_classes = {
+        en = "Copied breed priorities to all classes from",
+        ["zh-cn"] = "已将兵种优先级复制到所有职业，来源",
+        ["zh-tw"] = "已將兵種優先權複製到所有職業，來源",
+    },
     category_elite = {
         en = "Elites",
         ["zh-cn"] = "精英",
@@ -877,6 +887,24 @@ for breed_name, breed_data in pairs(Breeds) do
             add_breed_localization(breed_name, breed_data, true)
         end
     end
+end
+
+-- Half/full-speed ritual variants of the mutator ritualist
+do
+    local base = localization["chaos_mutator_ritualist"]
+    local base_en = base and base.en or "chaos_mutator_ritualist"
+    local base_cn = base and base["zh-cn"] or base_en
+    local base_tw = base and base["zh-tw"] or base_en
+    localization["chaos_mutator_ritualist_half"] = {
+        en = base_en .. " (Half-Speed Ritual)",
+        ["zh-cn"] = base_cn .. "（慢速仪式）",
+        ["zh-tw"] = base_tw .. "（慢速儀式）",
+    }
+    localization["chaos_mutator_ritualist_full"] = {
+        en = base_en .. " (Full-Speed Ritual)",
+        ["zh-cn"] = base_cn .. "（快速仪式）",
+        ["zh-tw"] = base_tw .. "（快速儀式）",
+    }
 end
 
 for class_name, archetype in pairs(Archetypes) do

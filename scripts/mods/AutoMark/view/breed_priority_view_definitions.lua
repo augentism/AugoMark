@@ -2,6 +2,7 @@ local mod                    = get_mod("AutoMark")
 
 local UIWorkspaceSettings    = mod:original_require("scripts/settings/ui/ui_workspace_settings")
 local ScrollbarPassTemplates = mod:original_require("scripts/ui/pass_templates/scrollbar_pass_templates")
+local ButtonPassTemplates    = mod:original_require("scripts/ui/pass_templates/button_pass_templates")
 local UIFontSettings         = mod:original_require("scripts/managers/ui/ui_font_settings")
 local UIWidget               = mod:original_require("scripts/managers/ui/ui_widget")
 
@@ -64,6 +65,14 @@ local scenegraph_definition  = {
         horizontal_alignment = "right",
         size                 = { scrollbar_width, class_grid_size[2] },
         position             = { 24, 0, 1 },
+    },
+
+    copy_button = {
+        vertical_alignment   = "top",
+        parent               = "class_panel",
+        horizontal_alignment = "left",
+        size                 = { class_grid_size[1], 44 },
+        position             = { 0, class_grid_size[2] + 16, 2 },
     },
 
     -- title
@@ -263,6 +272,11 @@ local widget_definitions = {
     }, "far_header"),
 
     class_scrollbar = UIWidget.create_definition(ScrollbarPassTemplates.default_scrollbar, "class_scrollbar"),
+
+    copy_button = UIWidget.create_definition(
+        table.clone(ButtonPassTemplates.default_button), "copy_button",
+        { original_text = mod:localize("copy_to_all_classes") }
+    ),
 
     class_grid_mask = UIWidget.create_definition({
         {

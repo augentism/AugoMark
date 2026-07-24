@@ -12,6 +12,8 @@ local servo_skull_visibility_check_frame               = mod.servo_skull_visibil
 
 -- Imports
 local Breed                                            = require("scripts/utilities/breed")
+local BreedActions                                     = require("scripts/settings/breed/breed_actions")
+local MainPathQueries                                  = require("scripts/utilities/main_path_queries")
 local SpecialRulesSettings                             = require("scripts/settings/ability/special_rules_settings")
 local Breed_height                                     = Breed.height
 local special_rules                                    = SpecialRulesSettings.special_rules
@@ -86,10 +88,88 @@ local function is_target_aggroed(target_unit)
     return target_unit_id ~= -1
 end
 
+-- Mutator ritualists channel a ritual that wakes a mutator daemonhost. The
+-- ritual's half/full speed is server-side only, so reconstruct it the way the
+-- server decides it (bt_chaos_mutator_daemonhost_passive_action): full when
+-- the daemonhost took damage or the party's ahead unit passed
+-- close_distance_offset along the main path, half past far_distance_offset.
+local RITUALIST_BREED_NAME = "chaos_mutator_ritualist"
+local ritual_passive_action = BreedActions.chaos_mutator_daemonhost and BreedActions.chaos_mutator_daemonhost.passive
+local RITUAL_CLOSE_OFFSET  = ritual_passive_action and ritual_passive_action.close_distance_offset or 15
+local RITUAL_FAR_OFFSET    = ritual_passive_action and ritual_passive_action.far_distance_offset or 30
+
+local function _ritual_speed(daemonhost_unit)
+    local health_extension = ScriptUnit.has_extension(daemonhost_unit, "health_system")
+    if health_extension and health_extension:damage_taken() > 0 then
+        return "full"
+    end
+
+    local _, ahead_travel_distance = Managers.state.main_path:ahead_unit(1)
+    if not ahead_travel_distance then
+        return nil
+    end
+
+    local position = POSITION_LOOKUP[daemonhost_unit] or Unit_world_position(daemonhost_unit, 1)
+    local _, monster_travel_distance = MainPathQueries.closest_position(position)
+    if not monster_travel_distance then
+        return nil
+    end
+
+    local close_position = MainPathQueries.position_from_distance(monster_travel_distance - RITUAL_CLOSE_OFFSET)
+    local _, close_distance = MainPathQueries.closest_position(close_position)
+    if close_distance and close_distance < ahead_travel_distance then
+        return "full"
+    end
+
+    local far_position = MainPathQueries.position_from_distance(monster_travel_distance - RITUAL_FAR_OFFSET)
+    local _, far_distance = MainPathQueries.closest_position(far_position)
+    if far_distance and far_distance < ahead_travel_distance then
+        return "half"
+    end
+
+    return nil
+end
+
+local function _ritualist_priority_name(target_unit)
+    local game_session = Managers.state.game_session:game_session()
+    local game_object_id = Managers.state.unit_spawner:game_object_id(target_unit)
+    if not game_object_id then
+        return RITUALIST_BREED_NAME
+    end
+
+    -- -1 = not chanting (staggered/idle)
+    local variation_id = GameSession.game_object_field(game_session, game_object_id, "effect_template_variation_id")
+    if not variation_id or variation_id == -1 then
+        return RITUALIST_BREED_NAME
+    end
+
+    -- the daemonhost this ritualist is channeling into (game object id)
+    local daemonhost_id = GameSession.game_object_field(game_session, game_object_id, "level_unit_id")
+    if not daemonhost_id or daemonhost_id == NetworkConstants.invalid_level_unit_id then
+        return RITUALIST_BREED_NAME
+    end
+
+    local daemonhost_unit = Managers.state.unit_spawner:unit(daemonhost_id, false)
+    if not daemonhost_unit or not HEALTH_ALIVE[daemonhost_unit] then
+        return RITUALIST_BREED_NAME
+    end
+
+    local speed = _ritual_speed(daemonhost_unit)
+    if speed then
+        return RITUALIST_BREED_NAME .. "_" .. speed
+    end
+
+    return RITUALIST_BREED_NAME
+end
+
 local function get_breed_priority(target_unit, breed_data, breed_priorities, distance, distance_threshold)
     local breed_name = breed_data and breed_data.name
     local entry
-    if breed_data.tags.witch then
+    if breed_name == RITUALIST_BREED_NAME then
+        local ok, priority_name = pcall(_ritualist_priority_name, target_unit)
+        entry = ok and breed_priorities[priority_name] or nil
+        entry = entry or breed_priorities[breed_name]
+    elseif breed_data.tags.witch then
         if is_target_aggroed(target_unit) then
             entry = breed_priorities[breed_name]
         else

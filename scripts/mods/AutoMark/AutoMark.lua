@@ -123,6 +123,12 @@ for breed_name, breed_data in pairs(breeds) do
         end
     end
 end
+-- Mutator ritualists channeling a daemonhost ritual at half/full speed have
+-- their own priority entries (detected at scan time from synced game state)
+if DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist"] then
+    DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist_half"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+    DEFAULT_CLASS_SETTINGS.breed_priorities["chaos_mutator_ritualist_full"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
+end
 mod.DEFAULT_CLASS_SETTINGS               = DEFAULT_CLASS_SETTINGS
 
 -- Context
