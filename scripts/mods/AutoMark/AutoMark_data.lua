@@ -236,6 +236,11 @@ local widgets = {
                 decimals_number = 1
             },
             {
+                setting_id    = "servo_skull_mark_without_los",
+                type          = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id      = "medicae_assist_keybind",
                 type            = "keybind",
                 default_value   = {},

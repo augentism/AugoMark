@@ -36,6 +36,7 @@ local mod_settings = {
     servo_skull_mark_keybind                 = mod:get("servo_skull_mark_keybind") or {},
     servo_skull_mark_ignore_unaggroed        = mod:get("servo_skull_mark_ignore_unaggroed") or false,
     servo_skull_burster_forbidden_range      = mod:get("servo_skull_burster_forbidden_range") or 0,
+    servo_skull_mark_without_los             = mod:get("servo_skull_mark_without_los") or false,
     medicae_snap_speed                       = mod:get("medicae_snap_speed") or 900,
     medicae_return_camera                    = mod:get("medicae_return_camera") or false,
     servo_skull_cancel_mark_time_threshold   = mod:get("servo_skull_cancel_mark_time_threshold") or 0,
@@ -578,12 +579,12 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
     -- mark when execution order priority is on
     local is_execution_order_priority = mod_settings.execution_order_priority and tag_name == TAG_NAMES.COMPANION_TAG and context.has_execution_order
 
-    local target_unit, target_tag, target_breed_name, target_priority, target_band
+    local target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los
     if class_settings.toggle_class and (class_settings.override_manual or not marked_tag_is_manual) then
         if is_cooldown_ready then
-            target_unit, target_tag, target_breed_name, target_priority, target_band = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
+            target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
         elseif is_priority_switch or is_execution_order_priority and marked_tag then
-            target_unit, target_tag, target_breed_name, target_priority, target_band = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
+            target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
         end
     end
     -- mark when focus target overwrite is on
@@ -622,7 +623,8 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
     if mod_settings.debug_mode then
         local action = tag_name == TAG_NAMES.SERVO_SKULL_TAG and "Auto Attack" or "Auto Mark"
         mod:print_debug(action, tag_name, "breed:", target_breed_name or "?",
-            "prio:", target_priority or "?", "band:", target_band or "-")
+            "prio:", target_priority or "?", "band:", target_band or "-",
+            target_no_los and "(no LOS - ping only until skull can see it)" or "")
     end
     mod:mark(tag_name, target_unit, target_tag)
     return true

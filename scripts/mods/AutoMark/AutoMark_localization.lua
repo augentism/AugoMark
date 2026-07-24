@@ -762,6 +762,16 @@ local localization = {
         ["zh-cn"] = "当启用时，聚焦目标将不会标记未警觉的敌人。",
         ["zh-tw"] = "當啟用時，專注目標將不會標記未觸發警戒的敵人。",
     },
+    servo_skull_mark_without_los = {
+        en = "Mark Targets Without Line of Sight",
+        ["zh-cn"] = "标记无视线的目标",
+        ["zh-tw"] = "標記無視線的目標",
+    },
+    servo_skull_mark_without_los_description = {
+        en = "When no target is visible to the servo-skull, mark the best blocked target anyway. The team still sees the ping, and the skull opens fire as soon as it has line of sight. Visible targets are always preferred.",
+        ["zh-cn"] = "当伺服颅骨看不到任何目标时，仍然标记最佳的被遮挡目标。队伍依然能看到标记，且颅骨一旦获得视线便会开火。始终优先选择可见目标。",
+        ["zh-tw"] = "當伺服顱骨看不到任何目標時，仍然標記最佳的被遮擋目標。隊伍依然能看到標記，且顱骨一旦獲得視線便會開火。始終優先選擇可見目標。",
+    },
     medicae_assist_keybind = {
         en = "Medicae Skull Assist Keybind",
         ["zh-cn"] = "医疗颅骨辅助快捷键",

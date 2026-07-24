@@ -567,6 +567,11 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     local best_unit_distance = math.huge
     local best_unit_band = nil
     local best_unit_breed_name = nil
+    -- last-resort target the skull cannot currently see: the team still gets
+    -- the ping and the skull engages once line of sight opens. Only used when
+    -- nothing visible was found.
+    local allow_no_los = tag_name == TAG_NAMES.SERVO_SKULL_TAG and mod_settings.servo_skull_mark_without_los
+    local blocked_unit, blocked_tag, blocked_priority, blocked_distance, blocked_band, blocked_breed_name
     -- diagnostic: why the best servo-skull candidate got rejected this scan
     local debug_servo = mod_settings.debug_mode and tag_name == TAG_NAMES.SERVO_SKULL_TAG
     local servo_reject_reason = nil
@@ -678,6 +683,18 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
 
             if not visible then
                 note_servo_reject("skull has no line of sight (wall / smoke / force field / range)", hit_unit_priority)
+                -- keep the best blocked candidate (highest priority, then
+                -- nearest) in case nothing visible turns up
+                if allow_no_los and (not blocked_unit
+                        or hit_unit_priority > blocked_priority
+                        or (hit_unit_priority == blocked_priority and distance < blocked_distance)) then
+                    blocked_unit = hit_unit
+                    blocked_tag = hit_unit_tag
+                    blocked_priority = hit_unit_priority
+                    blocked_distance = distance
+                    blocked_band = hit_unit_band
+                    blocked_breed_name = breed_data.name
+                end
                 goto continue
             end
 
@@ -694,6 +711,12 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
 
         if best_unit ~= marked_unit then
             return best_unit, best_unit_tag, best_unit_breed_name, best_unit_priority, best_unit_band
+        end
+
+        -- nothing visible: mark the best blocked target so the team still sees
+        -- the ping and the skull opens fire as soon as it has line of sight
+        if blocked_unit and blocked_unit ~= marked_unit then
+            return blocked_unit, blocked_tag, blocked_breed_name, blocked_priority, blocked_band, true
         end
 
         -- servo skull found nothing new; report the top rejected candidate's gate
