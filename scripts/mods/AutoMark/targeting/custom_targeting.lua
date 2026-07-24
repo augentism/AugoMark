@@ -19,6 +19,7 @@ local special_rules                                    = SpecialRulesSettings.sp
 -- Global Cache
 local CLASS                                            = CLASS
 local HEALTH_ALIVE                                     = HEALTH_ALIVE
+local ALIVE                                            = ALIVE
 local Managers                                         = Managers
 local GameSession                                      = GameSession
 local PhysicsWorld                                     = PhysicsWorld
@@ -85,17 +86,51 @@ local function is_target_aggroed(target_unit)
     return target_unit_id ~= -1
 end
 
-local function get_breed_priority(target_unit, breed_data, breed_priorities)
+local function get_breed_priority(target_unit, breed_data, breed_priorities, distance, distance_threshold)
     local breed_name = breed_data and breed_data.name
+    local entry
     if breed_data.tags.witch then
         if is_target_aggroed(target_unit) then
-            return breed_priorities[breed_name]
+            entry = breed_priorities[breed_name]
         else
-            return breed_priorities[breed_name .. "_passive"]
+            entry = breed_priorities[breed_name .. "_passive"]
         end
     else
-        return breed_priorities[breed_name]
+        entry = breed_priorities[breed_name]
     end
+
+    if type(entry) ~= "table" then
+        return entry
+    end
+
+    if distance and distance_threshold and distance <= distance_threshold then
+        return entry.close
+    end
+
+    return entry.far
+end
+
+local BURSTER_BREEDS = { chaos_poxwalker_bomber = true }
+
+-- servo skull only: never mark a burster close enough to hurt someone when popped
+local function is_burster_forbidden(target_position)
+    local radius = mod_settings.servo_skull_burster_forbidden_range
+    if not radius or radius <= 0 or not target_position then
+        return false
+    end
+
+    local radius_squared = radius * radius
+    for _, player in pairs(Managers.player:players()) do
+        local player_unit = player.player_unit
+        if player_unit and HEALTH_ALIVE[player_unit] then
+            local player_position = POSITION_LOOKUP[player_unit]
+            if player_position and Vector3_distance_squared(target_position, player_position) < radius_squared then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 -- Check if Target Unit's Breed is Valid for Auto-Mark
@@ -278,6 +313,40 @@ local function is_target_visible(ray_origin, up, hit_unit_center_pos, half_heigh
     return not hit_center
 end
 
+local function is_force_field_blocked(from_position, to_position)
+    local force_field_system = Managers.state.extension:system("force_field_system")
+    local unit_to_extension_map = force_field_system and force_field_system._unit_to_extension_map
+    if not unit_to_extension_map or not next(unit_to_extension_map) then
+        return false
+    end
+
+    local to_target = to_position - from_position
+    local length = Vector3_length(to_target)
+    if length < 0.05 then
+        return false
+    end
+
+    local direction = to_target / length
+    local steps = math.clamp(math.ceil(length / 0.5), 2, 120)
+
+    for unit, extension in pairs(unit_to_extension_map) do
+        if ALIVE[unit] and extension.is_unit_colliding then
+            if extension:is_unit_colliding(from_position, 0.3, true) or extension:is_unit_colliding(to_position, 0.3, true) then
+                return true
+            end
+
+            for i = 1, steps - 1 do
+                local point = from_position + direction * (length * i / steps)
+                if extension:is_unit_colliding(point, 0.3, true) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 local function is_servo_skull_target_visible(target_unit, fixed_frame)
     if not servo_skull_visibility_raycast_object then
         return false
@@ -325,8 +394,17 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
         return false
     end
 
-    local is_looking_trough_fog = smoke_fog_system:check_fog_los(servo_skull_position, target_position)
+    local is_looking_trough_fog = smoke_fog_system:check_fog_los(servo_skull_position, target_position, servo_skull_unit, true)
     if is_looking_trough_fog then
+        mod:print_debug("servo skull visibility blocked by smoke/fog")
+        servo_skull_visibility_cache[target_unit] = false
+        servo_skull_visibility_check_frame[target_unit] = fixed_frame
+        return false
+    end
+
+    local force_field_ok, force_field_blocked = pcall(is_force_field_blocked, servo_skull_position, target_position + Vector3(0, 0, 1.3))
+    if force_field_ok and force_field_blocked then
+        mod:print_debug("servo skull visibility blocked by force field")
         servo_skull_visibility_cache[target_unit] = false
         servo_skull_visibility_check_frame[target_unit] = fixed_frame
         return false
@@ -369,6 +447,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     local fixed_frame = smart_targeting_extension._latest_fixed_frame
     local canceled_unit = tag_context and tag_context.canceled_unit
     local breed_priorities = class_settings and class_settings.breed_priorities or EMPTY_TABLE
+    local distance_threshold = class_settings and class_settings.distance_threshold
     local execution_order_units = mark_context.execution_order_units
     local best_unit = nil
     local best_unit_tag = nil
@@ -381,8 +460,9 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         best_unit = marked_unit
         local unit_data_extension = ScriptUnit_extension(best_unit, "unit_data_system")
         local breed_data = unit_data_extension and unit_data_extension._breed
-        local breed_name = breed_data and breed_data.name
-        best_unit_priority = breed_priorities[breed_name] or 0
+        local marked_position = POSITION_LOOKUP[best_unit] or Unit_world_position(best_unit, 1)
+        local marked_distance = marked_position and Vector3_distance(marked_position, ray_origin)
+        best_unit_priority = breed_data and get_breed_priority(best_unit, breed_data, breed_priorities, marked_distance, distance_threshold) or 0
         best_unit_marked_by_execution_order = not not execution_order_units[best_unit]
     end
 
@@ -409,17 +489,23 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
                 goto continue
             end
 
-            local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities) or 0
-            -- filter unit by type and priority
-            if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
-                goto continue
-            end
-
             local half_height = Breed_height(hit_unit, breed_data) * 0.5
             local hit_unit_center_pos = Unit_world_position(hit_unit, 1) + Vector3(0, 0, 1) * half_height
             local distance = Vector3_distance(hit_unit_center_pos, ray_origin)
             -- filter unit by range
             if distance < min_range or distance > max_range then
+                goto continue
+            end
+
+            -- priority depends on distance (close/far split around distance_threshold)
+            local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities, distance, distance_threshold) or 0
+            -- filter unit by type and priority
+            if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
+                goto continue
+            end
+
+            -- never servo-skull-mark a burster near the player or a teammate
+            if tag_name == TAG_NAMES.SERVO_SKULL_TAG and BURSTER_BREEDS[breed_data.name] and is_burster_forbidden(POSITION_LOOKUP[hit_unit] or Unit_world_position(hit_unit, 1)) then
                 goto continue
             end
 
@@ -496,12 +582,6 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             goto continue
         end
 
-        local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities) or 0
-        -- filter unit by type and priority
-        if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
-            goto continue
-        end
-
         local hit_unit_pose, _ = Unit_box(hit_unit, true)
         local hit_unit_center_pos, _ = Actor_world_bounds(hit_actor)
         local object_right = Matrix4x4_right(hit_unit_pose)
@@ -516,6 +596,13 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
         local distance = Vector3_distance(hit_unit_center_pos, ray_origin) - half_width
         -- filter unit by range
         if distance < min_range or distance > max_range then
+            goto continue
+        end
+
+        -- priority depends on distance (close/far split around distance_threshold)
+        local hit_unit_priority = get_breed_priority(hit_unit, breed_data, breed_priorities, distance, distance_threshold) or 0
+        -- filter unit by type and priority
+        if use_filter and (hit_unit_priority <= 0 or not is_breed_valid(breed_data, class_settings)) then
             goto continue
         end
 
@@ -561,6 +648,10 @@ function mod:is_noospheric_command_boost_breed_valid(target_unit)
     end
 
     local breed_name = breed_data.name
+    if BURSTER_BREEDS[breed_name] and is_burster_forbidden(POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1)) then
+        return false
+    end
+
     local breed_settings = noospheric_command_breed_settings[breed_name]
     if breed_settings and breed_settings.override then
         return breed_settings.toggle

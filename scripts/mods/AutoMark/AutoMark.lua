@@ -35,6 +35,7 @@ local mod_settings = {
     companion_distance_threshold             = mod:get("companion_distance_threshold") or 0,
     servo_skull_mark_keybind                 = mod:get("servo_skull_mark_keybind") or {},
     servo_skull_mark_ignore_unaggroed        = mod:get("servo_skull_mark_ignore_unaggroed") or false,
+    servo_skull_burster_forbidden_range      = mod:get("servo_skull_burster_forbidden_range") or 0,
     servo_skull_cancel_mark_time_threshold   = mod:get("servo_skull_cancel_mark_time_threshold") or 0,
     hack_mark_keybind                        = mod:get("hack_mark_keybind") or {},
     auto_hack                                = mod:get("auto_hack") or false,
@@ -87,34 +88,38 @@ local companion_cancel_mark_breed_settings = mod:get("companion_cancel_mark_bree
 mod.companion_cancel_mark_breed_settings = companion_cancel_mark_breed_settings
 
 -- Default Class Settings
+-- breed_priorities entries are { close = 0-20, far = 0-20 }, selected by
+-- comparing target distance against the class's distance_threshold.
+local DEFAULT_BREED_PRIORITY = 12
 local DEFAULT_CLASS_SETTINGS = {
-    toggle_class     = true,
-    cooldown         = 25,
-    reset_cooldown   = true,
-    mark_limit       = true,
-    min_range        = 0,
-    max_range        = 100,
-    override_manual  = false,
-    priority_switch  = false,
-    toggle_elite     = true,
-    toggle_special   = true,
-    toggle_boss      = true,
-    toggle_other     = true,
-    breed_priorities = {},
+    toggle_class       = true,
+    cooldown           = 25,
+    reset_cooldown     = true,
+    mark_limit         = true,
+    min_range          = 0,
+    max_range          = 100,
+    distance_threshold = 15,
+    override_manual    = false,
+    priority_switch    = false,
+    toggle_elite       = true,
+    toggle_special     = true,
+    toggle_boss        = true,
+    toggle_other       = true,
+    breed_priorities   = {},
 }
 for breed_name, breed_data in pairs(breeds) do
     if Breed.is_minion(breed_data) and breed_data.smart_tag_target_type == "breed" then
         if breed_data.tags.elite then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = 3
+            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
         elseif breed_data.tags.special then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = 3
+            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
         elseif breed_data.is_boss then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = 3
+            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
             if breed_data.tags.witch then
-                DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name .. "_passive"] = 3
+                DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name .. "_passive"] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
             end
         elseif breed_data.faction_name ~= "imperium" then
-            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = 3
+            DEFAULT_CLASS_SETTINGS.breed_priorities[breed_name] = { close = DEFAULT_BREED_PRIORITY, far = DEFAULT_BREED_PRIORITY }
         end
     end
 end
@@ -148,6 +153,20 @@ mod.context                              = context
 -- Auto Mark Settings
 local auto_mark_settings                 = mod:get("auto_mark_settings") or {}
 mod.auto_mark_settings                   = auto_mark_settings
+-- Migrate legacy flat 0-5 priorities to { close, far } on the 0-20 scale.
+-- Must happen before init_auto_mark_settings, whose type check against the
+-- new table-shaped defaults would otherwise reset legacy numeric values.
+for _, class_settings in pairs(auto_mark_settings) do
+    local breed_priorities = type(class_settings) == "table" and class_settings.breed_priorities
+    if type(breed_priorities) == "table" then
+        for breed_name, priority in pairs(breed_priorities) do
+            if type(priority) == "number" then
+                local value = math.clamp(priority * 4, 0, 20)
+                breed_priorities[breed_name] = { close = value, far = value }
+            end
+        end
+    end
+end
 
 -- Mark States
 ---@class AutoMarkMarkContext
@@ -250,6 +269,44 @@ mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/base_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/companion_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/focus_target_mark")
 mod:io_dofile("AutoMark/scripts/mods/AutoMark/mark/servo_skull_mark")
+
+-- Breed Priority View
+local function register_breed_priority_view()
+    local base = "AutoMark/scripts/mods/AutoMark/view/breed_priority_view"
+    mod:add_require_path(base)
+    mod:add_require_path(base .. "_definitions")
+    mod:add_require_path(base .. "_blueprints")
+    mod:add_require_path(base .. "_settings")
+
+    mod:register_view({
+        view_name = "automark_breed_priority_view",
+        view_settings = {
+            init_view_function = function(_) return true end,
+            class               = "BreedPriorityView",
+            disable_game_world  = false,
+            display_name        = "Auto Mark Breed Priorities",
+            game_world_blur     = 1.1,
+            load_always         = true,
+            load_in_hub         = true,
+            package             = "packages/ui/views/options_view/options_view",
+            path                = base,
+            state_bound         = true,
+            enter_sound_events  = { "wwise/events/ui/play_ui_enter_short" },
+            exit_sound_events   = { "wwise/events/ui/play_ui_back_short" },
+            wwise_states        = { options = "ingame_menu" },
+        },
+        view_transitions = {},
+        view_options = {
+            close_all             = true,
+            close_previous        = true,
+            close_transition_time = nil,
+            transition_time       = nil,
+        },
+    })
+    mod:io_dofile(base)
+end
+
+register_breed_priority_view()
 
 --  Mod Enabled
 mod.on_enabled            = function(initial_call)
@@ -391,8 +448,6 @@ mod.on_setting_changed    = function(setting_id)
         local class_settings = auto_mark_settings[class_name]
         if DEFAULT_CLASS_SETTINGS[setting_id] ~= nil then
             class_settings[setting_id] = result
-        elseif DEFAULT_CLASS_SETTINGS.breed_priorities[setting_id] ~= nil then
-            class_settings.breed_priorities[setting_id] = result
         end
         mod:set("auto_mark_settings", auto_mark_settings, false)
     end
@@ -463,12 +518,18 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     if not target_unit and mod_settings.noospheric_command_boost and context.has_noospheric_command and tag_name == TAG_NAMES.SERVO_SKULL_TAG and marked_tag and t >= tag_context.noospheric_command_next_time then
         local marked_unit = marked_tag._target_unit
-        if mod:is_noospheric_command_boost_breed_valid(marked_unit) and mod:is_target_valid(tag_name, nil, marked_unit) and mod:is_servo_skull_target_visible(marked_unit, fixed_frame) then
+        local breed_ok = mod:is_noospheric_command_boost_breed_valid(marked_unit)
+        local valid_ok = breed_ok and mod:is_target_valid(tag_name, nil, marked_unit)
+        local visible_ok = valid_ok and mod:is_servo_skull_target_visible(marked_unit, fixed_frame)
+        if visible_ok then
             mod:print_debug("Noospheric command boost")
             target_unit = marked_unit
             if marked_tag_is_manual then
                 mod:on_manual_mark(tag_context, target_unit)
             end
+        elseif mod_settings.debug_mode and t - (tag_context.noospheric_debug_time or 0) > 1 then
+            tag_context.noospheric_debug_time = t
+            mod:print_debug("noospheric boost blocked: breed", breed_ok, "valid", valid_ok, "visible", visible_ok)
         end
     end
 

@@ -31,63 +31,9 @@ local other_widget   = {
     sub_widgets   = {},
 }
 
-local function create_breed_priority_dropdown(breed_name, default_value)
-    local breed_priority_setting = {
-        setting_id = breed_name,
-        type = "dropdown",
-        default_value = default_value,
-        options = {
-            { text = "priority_off",     value = 0 },
-            { text = "priority_lowest",  value = 1 },
-            { text = "priority_low",     value = 2 },
-            { text = "priority_medium",  value = 3 },
-            { text = "priority_high",    value = 4 },
-            { text = "priority_highest", value = 5 },
-
-        }
-    }
-    return breed_priority_setting
-end
-
-local elite_priority_dropdown   = {}
-local special_priority_dropdown = {}
-local boss_priority_dropdown    = {}
-local other_priority_dropdown   = {}
-
-for breed_name, breed_data in pairs(Breeds) do
-    if Breed.is_minion(breed_data) and breed_data.smart_tag_target_type == "breed" then
-        if breed_data.tags.elite then
-            elite_priority_dropdown[#elite_priority_dropdown + 1] = create_breed_priority_dropdown(breed_name, 3)
-        elseif breed_data.tags.special then
-            special_priority_dropdown[#special_priority_dropdown + 1] = create_breed_priority_dropdown(breed_name, 3)
-        elseif breed_data.is_boss then
-            boss_priority_dropdown[#boss_priority_dropdown + 1] = create_breed_priority_dropdown(breed_name, 3)
-            if breed_data.tags.witch then
-                boss_priority_dropdown[#boss_priority_dropdown + 1] = create_breed_priority_dropdown(breed_name .. "_passive", 3)
-            end
-        elseif breed_data.faction_name ~= "imperium" then
-            other_priority_dropdown[#other_priority_dropdown + 1] = create_breed_priority_dropdown(breed_name, 3)
-        end
-    end
-end
-
 local get_breed_sort = function(breed_name)
     return mod:localize(breed_name)
 end
-
-local compare_breed_name = function(a, b)
-    return get_breed_sort(a.setting_id) < get_breed_sort(b.setting_id)
-end
-
-table.sort(elite_priority_dropdown, compare_breed_name)
-table.sort(special_priority_dropdown, compare_breed_name)
-table.sort(boss_priority_dropdown, compare_breed_name)
-table.sort(other_priority_dropdown, compare_breed_name)
-
-elite_widget.sub_widgets = elite_priority_dropdown
-special_widget.sub_widgets = special_priority_dropdown
-boss_widget.sub_widgets = boss_priority_dropdown
-other_widget.sub_widgets = other_priority_dropdown
 
 local class_options = {
     { text = "adamant_companion",    value = "adamant_companion" },
@@ -171,6 +117,14 @@ local widgets = {
                 setting_id    = "toggle_mod_notify",
                 type          = "checkbox",
                 default_value = true,
+            },
+            {
+                setting_id      = "open_breed_priority_view",
+                type            = "keybind",
+                default_value   = {},
+                keybind_trigger = "pressed",
+                keybind_type    = "view_toggle",
+                view_name       = "automark_breed_priority_view",
             },
             {
                 setting_id    = "debug_mode",
@@ -306,6 +260,13 @@ local widgets = {
                 setting_id    = "servo_skull_mark_ignore_unaggroed",
                 type          = "checkbox",
                 default_value = false,
+            },
+            {
+                setting_id      = "servo_skull_burster_forbidden_range",
+                type            = "numeric",
+                default_value   = 10,
+                range           = { 0, 20 },
+                decimals_number = 1
             },
             {
                 setting_id      = "servo_skull_cancel_mark_time_threshold",

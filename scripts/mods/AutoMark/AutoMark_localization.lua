@@ -667,6 +667,66 @@ local localization = {
         ["zh-cn"] = "为其他敌人启用/禁用自动标记功能。",
         ["zh-tw"] = "啟用或停用其他敵人的自動標記功能。",
     },
+    open_breed_priority_view = {
+        en = "Breed Priority Menu Keybind",
+        ["zh-cn"] = "兵种优先级菜单快捷键",
+        ["zh-tw"] = "兵種優先權選單快捷鍵",
+    },
+    open_breed_priority_view_description = {
+        en = "Opens the breed priority menu: per-class distance threshold and close/far range priorities (0-20) for every breed.",
+        ["zh-cn"] = "打开兵种优先级菜单：每个职业的距离阈值以及每个兵种的近/远距离优先级（0-20）。",
+        ["zh-tw"] = "開啟兵種優先權選單：每個職業的距離門檻以及每個兵種的近/遠距離優先權（0-20）。",
+    },
+    breed_priority_view_title = {
+        en = "Auto Mark — Breed Priorities",
+        ["zh-cn"] = "自动标记 — 兵种优先级",
+        ["zh-tw"] = "自動標記 — 兵種優先權",
+    },
+    distance_threshold = {
+        en = "Close/Far Distance Threshold (m)",
+        ["zh-cn"] = "近/远距离阈值（米）",
+        ["zh-tw"] = "近/遠距離門檻（公尺）",
+    },
+    category_elite = {
+        en = "Elites",
+        ["zh-cn"] = "精英",
+        ["zh-tw"] = "精英",
+    },
+    category_special = {
+        en = "Specialists",
+        ["zh-cn"] = "专家",
+        ["zh-tw"] = "專家",
+    },
+    category_boss = {
+        en = "Bosses",
+        ["zh-cn"] = "Boss",
+        ["zh-tw"] = "Boss",
+    },
+    category_other = {
+        en = "Other",
+        ["zh-cn"] = "其他",
+        ["zh-tw"] = "其他",
+    },
+    priority_close = {
+        en = "Close",
+        ["zh-cn"] = "近距离",
+        ["zh-tw"] = "近距離",
+    },
+    priority_far = {
+        en = "Far",
+        ["zh-cn"] = "远距离",
+        ["zh-tw"] = "遠距離",
+    },
+    servo_skull_burster_forbidden_range = {
+        en = "Poxburster Forbidden Range",
+        ["zh-cn"] = "爆破手禁止范围",
+        ["zh-tw"] = "瘟疫爆破者禁止範圍",
+    },
+    servo_skull_burster_forbidden_range_description = {
+        en = "Do not servo-skull-mark a Poxburster within this many meters of you or a living teammate (0 = disabled). Popping it that close would damage the team.",
+        ["zh-cn"] = "当爆破手距离你或存活队友在此范围内（米）时，不使用伺服颅骨标记它（0 = 禁用）。在近距离引爆会伤害队伍。",
+        ["zh-tw"] = "當瘟疫爆破者距離你或存活隊友在此範圍內（公尺）時，不使用伺服顱骨標記它（0 = 停用）。近距離引爆會傷害隊伍。",
+    },
     priority_off = {
         en = "Off",
         ["zh-cn"] = "关闭",

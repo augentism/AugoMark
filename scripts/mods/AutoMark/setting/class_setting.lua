@@ -32,23 +32,25 @@ for class_name, _ in pairs(Archetypes) do
     VALID_CLASSES[class_name] = true
 end
 
+local OFF_PRIORITY = { close = 0, far = 0 }
+
 local ADAMANT_COMPANION_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
 local adamant_companion_breed_priorities = ADAMANT_COMPANION_DEFAULT_CLASS_SETTINGS.breed_priorities
-adamant_companion_breed_priorities["chaos_daemonhost_passive"] = 0
-adamant_companion_breed_priorities["chaos_mutator_daemonhost_passive"] = 0
-adamant_companion_breed_priorities["chaos_ogryn_houndmaster"] = 0
-adamant_companion_breed_priorities["chaos_poxwalker_bomber"] = 0
+adamant_companion_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
+adamant_companion_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
+adamant_companion_breed_priorities["chaos_ogryn_houndmaster"] = table_clone(OFF_PRIORITY)
+adamant_companion_breed_priorities["chaos_poxwalker_bomber"] = table_clone(OFF_PRIORITY)
 
 local CRYPTIC_SERVO_SKULL_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
 local cryptic_servo_skull_breed_priorities = CRYPTIC_SERVO_SKULL_DEFAULT_CLASS_SETTINGS.breed_priorities
-cryptic_servo_skull_breed_priorities["chaos_daemonhost_passive"] = 0
-cryptic_servo_skull_breed_priorities["chaos_mutator_daemonhost_passive"] = 0
-cryptic_servo_skull_breed_priorities["chaos_poxwalker_bomber"] = 0
+cryptic_servo_skull_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
+cryptic_servo_skull_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
+cryptic_servo_skull_breed_priorities["chaos_poxwalker_bomber"] = table_clone(OFF_PRIORITY)
 
 local VETERAN_FOCUS_TARGET_DEFAULT_CLASS_SETTINGS = table_clone(DEFAULT_CLASS_SETTINGS)
 local veteran_focus_target_breed_priorities = VETERAN_FOCUS_TARGET_DEFAULT_CLASS_SETTINGS.breed_priorities
-veteran_focus_target_breed_priorities["chaos_daemonhost_passive"] = 0
-veteran_focus_target_breed_priorities["chaos_mutator_daemonhost_passive"] = 0
+veteran_focus_target_breed_priorities["chaos_daemonhost_passive"] = table_clone(OFF_PRIORITY)
+veteran_focus_target_breed_priorities["chaos_mutator_daemonhost_passive"] = table_clone(OFF_PRIORITY)
 
 local function get_default_class_settings(class_name)
     if class_name == ADAMANT_COMPANION then
@@ -151,15 +153,34 @@ function mod:set_menu_settings(class_name)
     mod:set("class_selection", class_name, false)
     local class_settings = auto_mark_settings[class_name]
     for setting_name, default_setting in pairs(get_default_class_settings(class_name)) do
-        if type(default_setting) == "table" then
-            local breed_priorities = class_settings[setting_name]
-            for breed_name, _ in pairs(default_setting) do
-                mod:set(breed_name, breed_priorities[breed_name], false)
-            end
-        else
+        -- breed_priorities no longer have DMF option widgets; they are edited in the breed priority view
+        if type(default_setting) ~= "table" then
             mod:set(setting_name, class_settings[setting_name], false)
         end
     end
+end
+
+-- Ordered class list for the breed priority view: special tag contexts first,
+-- then base classes alphabetically
+function mod:get_priority_class_names()
+    local special = { ADAMANT_COMPANION, CRYPTIC_SERVO_SKULL, VETERAN_FOCUS_TARGET }
+    local base = {}
+    for class_name, _ in pairs(BASE_CLASSES) do
+        base[#base + 1] = class_name
+    end
+    table.sort(base)
+    local names = {}
+    for _, class_name in ipairs(special) do
+        names[#names + 1] = class_name
+    end
+    for _, class_name in ipairs(base) do
+        names[#names + 1] = class_name
+    end
+    return names
+end
+
+function mod:get_class_settings_by_name(class_name)
+    return auto_mark_settings[class_name]
 end
 
 -- Get Class Settings by Tag Name
