@@ -34,6 +34,7 @@ local Unit_world_position                              = Unit.world_position
 local PhysicsWorld_raycast                             = PhysicsWorld.raycast
 local Raycast_cast                                     = Raycast.cast
 local ScriptUnit_extension                             = ScriptUnit.extension
+local ScriptUnit_has_extension                         = ScriptUnit.has_extension
 local math_abs                                         = math.abs
 local math_max                                         = math.max
 local Vector3_dot                                      = Vector3.dot
@@ -194,6 +195,34 @@ end
 
 local BURSTER_BREEDS = { chaos_poxwalker_bomber = true }
 
+-- Distance from a position to the closest player (self, teammate or bot).
+-- Unit.world_position is read directly rather than POSITION_LOOKUP: that table
+-- is only refreshed for units the local session ticks, so remote players can
+-- carry a stale or missing entry, which silently defeated the radius check.
+local function nearest_player_distance(target_position)
+    if not target_position then
+        return nil
+    end
+
+    local nearest_squared, nearest_player
+    for _, player in pairs(Managers.player:players()) do
+        local player_unit = player.player_unit
+        if player_unit and ALIVE[player_unit] and HEALTH_ALIVE[player_unit] then
+            local player_position = Unit_world_position(player_unit, 1)
+            local distance_squared = Vector3_distance_squared(target_position, player_position)
+            if not nearest_squared or distance_squared < nearest_squared then
+                nearest_squared = distance_squared
+                nearest_player = player
+            end
+        end
+    end
+
+    if not nearest_squared then
+        return nil
+    end
+    return math.sqrt(nearest_squared), nearest_player
+end
+
 -- servo skull only: never mark a burster close enough to hurt someone when popped
 local function is_burster_forbidden(target_position)
     local radius = mod_settings.servo_skull_burster_forbidden_range
@@ -201,36 +230,60 @@ local function is_burster_forbidden(target_position)
         return false
     end
 
-    local radius_squared = radius * radius
-    for _, player in pairs(Managers.player:players()) do
-        local player_unit = player.player_unit
-        if player_unit and HEALTH_ALIVE[player_unit] then
-            local player_position = POSITION_LOOKUP[player_unit]
-            if player_position and Vector3_distance_squared(target_position, player_position) < radius_squared then
-                return true
-            end
-        end
-    end
+    local distance = nearest_player_distance(target_position)
+    return distance ~= nil and distance < radius
+end
 
-    return false
+local function burster_position(target_unit)
+    if not ALIVE[target_unit] then
+        return nil
+    end
+    if not ScriptUnit_has_extension(target_unit, "unit_data_system") then
+        return nil
+    end
+    local unit_data_extension = ScriptUnit_extension(target_unit, "unit_data_system")
+    local breed_data = unit_data_extension and unit_data_extension._breed
+    if not breed_data or not BURSTER_BREEDS[breed_data.name] then
+        return nil
+    end
+    return Unit_world_position(target_unit, 1)
 end
 
 -- true when this unit is a burster currently inside the forbidden radius
 local function is_burster_unit_forbidden(target_unit)
-    local unit_data_extension = ScriptUnit_extension(target_unit, "unit_data_system")
-    local breed_data = unit_data_extension and unit_data_extension._breed
-    if not breed_data or not BURSTER_BREEDS[breed_data.name] then
-        return false
-    end
-    return is_burster_forbidden(POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1))
+    local position = burster_position(target_unit)
+    return position ~= nil and is_burster_forbidden(position)
 end
 
 function mod:is_burster_mark_forbidden(target_unit)
-    if not target_unit or not HEALTH_ALIVE[target_unit] then
+    if not target_unit then
         return false
     end
     local ok, forbidden = pcall(is_burster_unit_forbidden, target_unit)
-    return ok and forbidden or false
+    if not ok then
+        mod:print_debug("burster forbidden check errored:", tostring(forbidden))
+        return false
+    end
+    return forbidden
+end
+
+-- Debug-only: report how close the nearest player is to a marked burster, so a
+-- mark that refuses to cancel can be told apart from one that was never
+-- considered a burster in the first place.
+function mod:debug_burster_mark_state(target_unit)
+    local ok, position = pcall(burster_position, target_unit)
+    if not ok then
+        return "burster check errored: " .. tostring(position)
+    end
+    if not position then
+        return "marked unit is not a live burster"
+    end
+    local distance, player = nearest_player_distance(position)
+    if not distance then
+        return "burster marked, but no live player positions available"
+    end
+    return string.format("burster %.1fm from nearest player (%s), radius %.1f",
+        distance, player and player:name() or "?", mod_settings.servo_skull_burster_forbidden_range or 0)
 end
 
 -- Check if Target Unit's Breed is Valid for Auto-Mark
@@ -642,7 +695,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             end
 
             -- never servo-skull-mark a burster near the player or a teammate
-            if tag_name == TAG_NAMES.SERVO_SKULL_TAG and BURSTER_BREEDS[breed_data.name] and is_burster_forbidden(POSITION_LOOKUP[hit_unit] or Unit_world_position(hit_unit, 1)) then
+            if tag_name == TAG_NAMES.SERVO_SKULL_TAG and BURSTER_BREEDS[breed_data.name] and is_burster_forbidden(Unit_world_position(hit_unit, 1)) then
                 note_servo_reject("burster too close to player/teammate", hit_unit_priority)
                 goto continue
             end
@@ -823,7 +876,7 @@ function mod:is_noospheric_command_boost_breed_valid(target_unit)
     end
 
     local breed_name = breed_data.name
-    if BURSTER_BREEDS[breed_name] and is_burster_forbidden(POSITION_LOOKUP[target_unit] or Unit_world_position(target_unit, 1)) then
+    if BURSTER_BREEDS[breed_name] and is_burster_forbidden(Unit_world_position(target_unit, 1)) then
         return false
     end
 
