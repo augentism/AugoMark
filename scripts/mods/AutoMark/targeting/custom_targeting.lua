@@ -808,7 +808,11 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
                 note_servo_reject("skull has no line of sight (wall / smoke / force field / range)", hit_unit_priority)
                 -- keep the best blocked candidate (highest priority, then
                 -- nearest) in case nothing visible turns up
-                if allow_no_los and (not blocked_unit
+                -- Bursters are excluded from the no-line-of-sight fallback. The
+                -- whole value of marking one is having it shot, which needs
+                -- sight; an unseeable burster mark only occupies the order slot
+                -- while the skull keeps firing at whatever it can see.
+                if allow_no_los and not BURSTER_BREEDS[breed_data.name] and (not blocked_unit
                         or hit_unit_priority > blocked_priority
                         or (hit_unit_priority == blocked_priority and distance < blocked_distance)) then
                     blocked_unit = hit_unit
