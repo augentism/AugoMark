@@ -39,20 +39,40 @@ function mod:on_manual_mark(tag_context, target_unit)
     on_manual_mark(tag_context, target_unit)
 end
 
--- cancel mark by tag id
+-- A client cancel is an RPC round trip; the tag lives on locally until the
+-- server answers (~50-170ms observed). Without this latch every caller re-fires
+-- the request each frame, flooding the channel with dozens of duplicates for a
+-- single cancel. Entries are keyed by tag id and expire so a reused id is not
+-- permanently suppressed.
+local CANCEL_REQUEST_TIMEOUT = 2
+local cancel_requested_time = {}
+
+-- cancel mark by tag id; returns true when a request was actually sent
 function mod:cancel_mark(tag_id)
     local smart_tag_system = context.smart_tag_system
     if not smart_tag_system then
-        return
+        return false
     end
 
     local player = context.player
     local player_unit = player and player.player_unit
     if not player_unit then
-        return
+        return false
     end
 
+    local t = mod:get_latest_fixed_time()
+    local requested_time = cancel_requested_time[tag_id]
+    if requested_time and t - requested_time < CANCEL_REQUEST_TIMEOUT then
+        return false
+    end
+    cancel_requested_time[tag_id] = t
+
     smart_tag_system:cancel_tag(tag_id, player_unit)
+    return true
+end
+
+function mod:clear_cancel_request(tag_id)
+    cancel_requested_time[tag_id] = nil
 end
 
 -- mark target unit with tag
@@ -197,11 +217,13 @@ mod:hook(CLASS.SmartTag, "destroy",
     function(func, self)
         local tag_name = self._template.name
         local tag_context = mark_context[tag_name]
+        mod:clear_cancel_request(self._id)
         if not tag_context then
             return func(self)
         end
 
         if tag_context.tag == self then
+            tag_context.is_no_los = false
             if mod:get_class_settings(tag_name).reset_cooldown then
                 tag_context.cooldown = 0
             end

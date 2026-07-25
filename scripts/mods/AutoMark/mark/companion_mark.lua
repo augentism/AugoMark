@@ -156,9 +156,10 @@ function mod:auto_cancel_companion_mark(t)
     if health_threshold > 0 and tag_context.pounce_start_time then
         local health_percent = Health.current_health_percent(marked_unit)
         if health_percent < health_threshold then
-            mod:print_debug("cancel companion mark due to health threshold, health_percent:", health_percent)
             tag_context.canceled_unit = marked_unit
-            mod:cancel_mark(marked_tag._id)
+            if mod:cancel_mark(marked_tag._id) then
+                mod:print_debug("cancel companion mark due to health threshold, health_percent:", health_percent)
+            end
             return
         end
     end
@@ -166,9 +167,10 @@ function mod:auto_cancel_companion_mark(t)
     if time_threshold > 0 and tag_context.pounce_start_time then
         local elapsed_time = t - tag_context.pounce_start_time
         if elapsed_time > time_threshold then
-            mod:print_debug("cancel companion mark due to time threshold, elapsed_time:", elapsed_time)
             tag_context.canceled_unit = marked_unit
-            mod:cancel_mark(marked_tag._id)
+            if mod:cancel_mark(marked_tag._id) then
+                mod:print_debug("cancel companion mark due to time threshold, elapsed_time:", elapsed_time)
+            end
             return
         end
     end
@@ -197,9 +199,10 @@ function mod:auto_cancel_companion_mark(t)
 
             local distance_squared = Vector3_distance_squared(companion_position, player_position)
             if distance_squared > distance_threshold * distance_threshold then
-                mod:print_debug("cancel companion mark due to distance threshold, distance squared:", distance_squared)
                 tag_context.canceled_unit = marked_unit
-                mod:cancel_mark(marked_tag._id)
+                if mod:cancel_mark(marked_tag._id) then
+                    mod:print_debug("cancel companion mark due to distance threshold, distance squared:", distance_squared)
+                end
                 return
             end
         until true

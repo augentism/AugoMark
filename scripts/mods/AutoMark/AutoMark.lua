@@ -646,6 +646,8 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
             target_no_los and "(no LOS - ping only until skull can see it)" or "")
     end
     mod:mark(tag_name, target_unit, target_tag)
+    -- set after mod:mark: the SmartTag init hook rebuilds the tag context
+    tag_context.is_no_los = not not target_no_los
     return true
 end
 

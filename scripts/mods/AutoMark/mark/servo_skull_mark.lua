@@ -250,15 +250,21 @@ function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
     -- the player or a teammate is dropped immediately, even for manual marks
     -- and regardless of the lose-sight threshold setting.
     if mod:is_burster_mark_forbidden(marked_unit) then
-        mod:print_debug("cancel servo skull mark: burster entered forbidden range")
-        mod:cancel_mark(marked_tag._id)
+        if mod:cancel_mark(marked_tag._id) then
+            mod:print_debug("cancel servo skull mark: burster entered forbidden range")
+        end
         return
     elseif mod_settings.debug_mode and t - (tag_context.burster_debug_time or 0) > 1 then
         tag_context.burster_debug_time = t
         mod:print_debug("burster mark check:", mod:debug_burster_mark_state(marked_unit))
     end
 
-    if mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or tag_context.is_manual then
+    -- A no-line-of-sight mark is deliberately on something the skull cannot
+    -- see, so the lose-sight timer would cancel it the instant it is placed --
+    -- the two features would just fight each other. Such marks are still
+    -- dropped by the burster check above and replaced by normal re-targeting
+    -- as soon as anything visible shows up.
+    if mod_settings.servo_skull_cancel_mark_time_threshold <= 0 or tag_context.is_manual or tag_context.is_no_los then
         return
     end
 
@@ -269,7 +275,8 @@ function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
     end
 
     if tag_context.servo_skull_lose_sight_time and t - tag_context.servo_skull_lose_sight_time > mod_settings.servo_skull_cancel_mark_time_threshold then
-        mod:print_debug("cancel servo skull mark due to time threshold")
-        mod:cancel_mark(marked_tag._id)
+        if mod:cancel_mark(marked_tag._id) then
+            mod:print_debug("cancel servo skull mark due to time threshold")
+        end
     end
 end
