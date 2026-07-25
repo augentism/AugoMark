@@ -868,9 +868,9 @@ local localization = {
         ["zh-tw"] = "瘟疫爆破者禁止範圍",
     },
     servo_skull_burster_forbidden_range_description = {
-        en = "Do not servo-skull-mark a Poxburster within this many meters of you or a living teammate (0 = disabled). Popping it that close would damage the team.",
-        ["zh-cn"] = "当爆破手距离你或存活队友在此范围内（米）时，不使用伺服颅骨标记它（0 = 禁用）。在近距离引爆会伤害队伍。",
-        ["zh-tw"] = "當瘟疫爆破者距離你或存活隊友在此範圍內（公尺）時，不使用伺服顱骨標記它（0 = 停用）。近距離引爆會傷害隊伍。",
+        en = "Do not servo-skull-mark a Poxburster within this many meters of you or a living teammate (0 = disabled). The blast radius is 6m, so anything above 6 is margin: a charging burster closes roughly 6m per second and cancelling an existing mark takes a moment, so raise this if bursters still pop on the team.",
+        ["zh-cn"] = "当爆破手距离你或存活队友在此范围内（米）时，不使用伺服颅骨标记它（0 = 禁用）。爆炸半径为 6 米，因此超过 6 的部分即为余量：冲锋的爆破手每秒推进约 6 米，且取消已有标记需要片刻，若仍在队伍附近引爆请调高此值。",
+        ["zh-tw"] = "當瘟疫爆破者距離你或存活隊友在此範圍內（公尺）時，不使用伺服顱骨標記它（0 = 停用）。爆炸半徑為 6 公尺，因此超過 6 的部分即為餘裕：衝鋒的爆破者每秒推進約 6 公尺，且取消既有標記需要片刻，若仍在隊伍附近引爆請調高此值。",
     },
     priority_off = {
         en = "Off",

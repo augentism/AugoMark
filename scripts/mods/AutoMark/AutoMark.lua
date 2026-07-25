@@ -641,7 +641,7 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     if mod_settings.debug_mode then
         local action = tag_name == TAG_NAMES.SERVO_SKULL_TAG and "Auto Attack" or "Auto Mark"
-        mod:print_debug(action, tag_name, "breed:", target_breed_name or "?",
+        mod:print_debug(action, tag_name, tostring(target_unit), "breed:", target_breed_name or "?",
             "prio:", target_priority or "?", "band:", target_band or "-",
             target_no_los and "(no LOS - ping only until skull can see it)" or "")
     end
@@ -728,6 +728,9 @@ mod:hook_safe(CLASS.PlayerUnitSmartTargetingExtension, "fixed_update",
 
         if context.game_mode_valid then
             clean_visibility_cache(fixed_frame)
+            if mod_settings.debug_mode then
+                mod:update_burster_watch()
+            end
             mod:auto_cancel_companion_mark(t)
             mod:auto_cancel_servo_skull_mark(t, fixed_frame)
             mod:auto_hack(dt, t, fixed_frame)

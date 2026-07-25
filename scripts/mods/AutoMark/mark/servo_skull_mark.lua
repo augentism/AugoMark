@@ -249,14 +249,28 @@ function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
     -- Safety first: a marked burster that walked into the forbidden radius of
     -- the player or a teammate is dropped immediately, even for manual marks
     -- and regardless of the lose-sight threshold setting.
+    -- watched before the branch so a burster first seen already inside the
+    -- radius is still followed to its death
+    if mod_settings.debug_mode then
+        mod:watch_burster(marked_unit)
+    end
+
     if mod:is_burster_mark_forbidden(marked_unit) then
         if mod:cancel_mark(marked_tag._id) then
-            mod:print_debug("cancel servo skull mark: burster entered forbidden range")
+            mod:print_debug("cancel servo skull mark: burster entered forbidden range,", tostring(marked_unit))
         end
         return
-    elseif mod_settings.debug_mode and t - (tag_context.burster_debug_time or 0) > 1 then
-        tag_context.burster_debug_time = t
-        mod:print_debug("burster mark check:", mod:debug_burster_mark_state(marked_unit))
+    elseif mod_settings.debug_mode then
+        -- Sampled once a second normally, but as a burster nears the radius the
+        -- approach is what matters, so log every tick inside 2x the radius --
+        -- the check itself always runs at the full fixed-frame rate.
+        local message, distance = mod:debug_burster_mark_state(marked_unit)
+        local radius = mod_settings.servo_skull_burster_forbidden_range or 0
+        local interval = (distance and radius > 0 and distance < radius * 2) and 0 or 1
+        if t - (tag_context.burster_debug_time or 0) > interval then
+            tag_context.burster_debug_time = t
+            mod:print_debug("burster mark check:", message)
+        end
     end
 
     -- A no-line-of-sight mark is deliberately on something the skull cannot

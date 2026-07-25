@@ -271,19 +271,70 @@ end
 -- mark that refuses to cancel can be told apart from one that was never
 -- considered a burster in the first place.
 function mod:debug_burster_mark_state(target_unit)
+    -- tostring on a unit yields the engine's "[Unit '#ID[...]']" form, which is
+    -- what makes consecutive samples attributable to the same burster
+    local unit_id = tostring(target_unit)
     local ok, position = pcall(burster_position, target_unit)
     if not ok then
-        return "burster check errored: " .. tostring(position)
+        return string.format("%s burster check errored: %s", unit_id, tostring(position))
     end
     if not position then
-        return "marked unit is not a live burster"
+        return unit_id .. " marked unit is not a live burster"
     end
     local distance, player = nearest_player_distance(position)
     if not distance then
-        return "burster marked, but no live player positions available"
+        return unit_id .. " burster marked, but no live player positions available"
     end
-    return string.format("burster %.1fm from nearest player (%s), radius %.1f",
-        distance, player and player:name() or "?", mod_settings.servo_skull_burster_forbidden_range or 0)
+    return string.format("%s burster %.1fm from nearest player (%s), radius %.1f",
+        unit_id, distance, player and player:name() or "?", mod_settings.servo_skull_burster_forbidden_range or 0), distance
+end
+
+-- Debug-only burster death watch.
+--
+-- Scoreboard learns about kills from AttackReportManager, but that only reports
+-- attacks the local session resolves -- the servo skull's damage is server side,
+-- so its kills would be missed. This instead keeps sampling every burster the
+-- mod has marked and reports the moment the unit stops being alive, which is
+-- what actually answers "how close was it when it went off".
+local watched_bursters = setmetatable({}, { __mode = "k" })
+
+function mod:watch_burster(target_unit)
+    if not target_unit or watched_bursters[target_unit] then
+        return
+    end
+    local ok, position = pcall(burster_position, target_unit)
+    if not ok or not position then
+        return
+    end
+    local distance, player = nearest_player_distance(position)
+    watched_bursters[target_unit] = {
+        distance = distance,
+        player_name = player and player:name() or "?",
+        marked_distance = distance,
+    }
+end
+
+function mod:update_burster_watch()
+    for target_unit, record in pairs(watched_bursters) do
+        local alive = ALIVE[target_unit] and HEALTH_ALIVE[target_unit]
+        if alive then
+            local ok, position = pcall(burster_position, target_unit)
+            local distance, player = nil, nil
+            if ok and position then
+                distance, player = nearest_player_distance(position)
+            end
+            if distance then
+                record.distance = distance
+                record.player_name = player and player:name() or "?"
+            end
+        else
+            watched_bursters[target_unit] = nil
+            mod:print_debug(string.format(
+                "burster died: %s last seen %.1fm from %s (radius %.1f, was %.1fm when first marked)",
+                tostring(target_unit), record.distance or -1, record.player_name,
+                mod_settings.servo_skull_burster_forbidden_range or 0, record.marked_distance or -1))
+        end
+    end
 end
 
 -- Check if Target Unit's Breed is Valid for Auto-Mark
