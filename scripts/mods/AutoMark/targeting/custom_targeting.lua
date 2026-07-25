@@ -267,13 +267,30 @@ function mod:is_burster_mark_forbidden(target_unit)
     return forbidden
 end
 
+-- tostring on a Unit reports a recycled box pointer, so every unit in a session
+-- prints the same "#ID[...]" and samples cannot be attributed to one enemy. The
+-- game object id is the actual network identity.
+function mod:unit_debug_id(target_unit)
+    if not target_unit then
+        return "nil"
+    end
+    local unit_spawner = Managers.state.unit_spawner
+    local ok, game_object_id = pcall(function()
+        return unit_spawner and unit_spawner:game_object_id(target_unit)
+    end)
+    if ok and game_object_id then
+        return "go:" .. tostring(game_object_id)
+    end
+    return "go:? " .. tostring(target_unit)
+end
+
 -- Debug-only: report how close the nearest player is to a marked burster, so a
 -- mark that refuses to cancel can be told apart from one that was never
 -- considered a burster in the first place.
 function mod:debug_burster_mark_state(target_unit)
     -- tostring on a unit yields the engine's "[Unit '#ID[...]']" form, which is
     -- what makes consecutive samples attributable to the same burster
-    local unit_id = tostring(target_unit)
+    local unit_id = mod:unit_debug_id(target_unit)
     local ok, position = pcall(burster_position, target_unit)
     if not ok then
         return string.format("%s burster check errored: %s", unit_id, tostring(position))
@@ -308,6 +325,8 @@ function mod:watch_burster(target_unit)
     end
     local distance, player = nearest_player_distance(position)
     watched_bursters[target_unit] = {
+        -- captured while the unit is alive: the id is unresolvable once deleted
+        unit_id = mod:unit_debug_id(target_unit),
         distance = distance,
         player_name = player and player:name() or "?",
         marked_distance = distance,
@@ -331,7 +350,7 @@ function mod:update_burster_watch()
             watched_bursters[target_unit] = nil
             mod:print_debug(string.format(
                 "burster died: %s last seen %.1fm from %s (radius %.1f, was %.1fm when first marked)",
-                tostring(target_unit), record.distance or -1, record.player_name,
+                record.unit_id, record.distance or -1, record.player_name,
                 mod_settings.servo_skull_burster_forbidden_range or 0, record.marked_distance or -1))
         end
     end

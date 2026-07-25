@@ -257,7 +257,7 @@ function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
 
     if mod:is_burster_mark_forbidden(marked_unit) then
         if mod:cancel_mark(marked_tag._id) then
-            mod:print_debug("cancel servo skull mark: burster entered forbidden range,", tostring(marked_unit))
+            mod:print_debug("cancel servo skull mark: burster entered forbidden range,", mod:unit_debug_id(marked_unit))
         end
         return
     elseif mod_settings.debug_mode then
