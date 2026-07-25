@@ -767,6 +767,16 @@ local localization = {
         ["zh-cn"] = "标记无视线的目标",
         ["zh-tw"] = "標記無視線的目標",
     },
+    servo_skull_no_los_disable_near_burster = {
+        en = "Suppress While A Poxburster Is Close",
+        ["zh-cn"] = "爆破手接近时暂停",
+        ["zh-tw"] = "瘟疫爆破者接近時暫停",
+    },
+    servo_skull_no_los_disable_near_burster_description = {
+        en = "While a Poxburster sits inside the forbidden range, do not mark unseeable targets at all. The servo-skull cannot act on such a mark, and leaving the order slot empty lets its own target selection deal with the burster.",
+        ["zh-cn"] = "当爆破手处于禁止范围内时，完全不标记看不见的目标。伺服颅骨无法执行此类标记，空出指令位可让其自身的目标选择处理该爆破手。",
+        ["zh-tw"] = "當瘟疫爆破者處於禁止範圍內時，完全不標記看不見的目標。伺服顱骨無法執行此類標記，空出指令位可讓其自身的目標選擇處理該爆破者。",
+    },
     servo_skull_mark_without_los_description = {
         en = "When no target is visible to the servo-skull, mark the best blocked target anyway. The team still sees the ping, Noospheric Command still grants its fire-rate buff while the skull shoots whatever else it can reach, and the skull engages the marked target as soon as it has line of sight. Such marks are re-issued on the buff's own cadence; visible targets are always preferred.",
         ["zh-cn"] = "当伺服颅骨看不到任何目标时，仍然标记最佳的被遮挡目标。队伍依然能看到标记，且颅骨一旦获得视线便会开火。始终优先选择可见目标。",

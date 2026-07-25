@@ -246,18 +246,36 @@ function mod:auto_cancel_servo_skull_mark(t, fixed_frame)
         return
     end
 
-    -- Safety first: a marked burster that walked into the forbidden radius of
-    -- the player or a teammate is dropped immediately, even for manual marks
-    -- and regardless of the lose-sight threshold setting.
     -- watched before the branch so a burster first seen already inside the
     -- radius is still followed to its death
     if mod_settings.debug_mode then
         mod:watch_burster(marked_unit)
     end
 
-    if mod:is_burster_mark_forbidden(marked_unit) then
-        if mod:cancel_mark(marked_tag._id) then
-            mod:print_debug("cancel servo skull mark: burster entered forbidden range,", mod:unit_debug_id(marked_unit))
+    -- Safety: a marked burster that walked into the forbidden radius of the
+    -- player or a teammate must lose the skull's attention, regardless of the
+    -- lose-sight threshold setting. A manual mark is an explicit order and
+    -- overrides the rule -- if you ping a burster point blank, you meant it.
+    --
+    -- Redirect rather than cancel: clearing the tag hands the skull back to its
+    -- own target selection, which scores a charging burster near the top
+    -- (close, aggroed on the owner, tagged special, inside the owner's view) and
+    -- simply picks it again. Overwriting the tag with another visible target is
+    -- the only way to actually pull it off. Cancelling stays as the fallback for
+    -- when there is nothing else to shoot -- no worse than the tag being dropped.
+    if not tag_context.is_manual and mod:is_burster_mark_forbidden(marked_unit) then
+        local class_settings = mod:get_class_settings(TAG_NAMES.SERVO_SKULL_TAG)
+        -- require_los: an unseeable replacement would not occupy the skull's
+        -- override slot either, leaving it free to re-select the burster
+        local redirect_unit, redirect_tag = mod:find_target_unit_custom("auto", class_settings.min_range,
+            class_settings.max_range, TAG_NAMES.SERVO_SKULL_TAG, tag_context, class_settings, true, false, nil, true)
+        if redirect_unit and redirect_unit ~= marked_unit then
+            mod:print_debug("redirect servo skull off forbidden burster", mod:unit_debug_id(marked_unit),
+                "onto", mod:unit_debug_id(redirect_unit))
+            mod:mark(TAG_NAMES.SERVO_SKULL_TAG, redirect_unit, redirect_tag)
+        elseif mod:cancel_mark(marked_tag._id) then
+            mod:print_debug("cancel servo skull mark: burster entered forbidden range, no alternative target,",
+                mod:unit_debug_id(marked_unit))
         end
         return
     elseif mod_settings.debug_mode then

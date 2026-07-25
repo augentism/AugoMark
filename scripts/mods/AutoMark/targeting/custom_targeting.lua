@@ -664,7 +664,7 @@ local function is_servo_skull_target_visible(target_unit, fixed_frame)
     return not hit
 end
 
-function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_context, class_settings, use_filter, is_execution_order_priority, marked_tag)
+function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_context, class_settings, use_filter, is_execution_order_priority, marked_tag, require_los)
     local player = context.player
     local player_unit = player and player.player_unit
     local smart_targeting_extension = context.smart_targeting_extension
@@ -694,7 +694,10 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     -- the ping and the skull engages once line of sight opens. Only used when
     -- nothing visible was found.
     local allow_no_los = tag_name == TAG_NAMES.SERVO_SKULL_TAG and mod_settings.servo_skull_mark_without_los
+        and not require_los
     local blocked_unit, blocked_tag, blocked_priority, blocked_distance, blocked_band, blocked_breed_name
+    -- set when a burster was rejected for sitting inside the forbidden radius
+    local burster_in_forbidden_zone = false
     -- diagnostic: why the best servo-skull candidate got rejected this scan
     local debug_servo = mod_settings.debug_mode and tag_name == TAG_NAMES.SERVO_SKULL_TAG
     local servo_reject_reason = nil
@@ -767,6 +770,7 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             -- never servo-skull-mark a burster near the player or a teammate
             if tag_name == TAG_NAMES.SERVO_SKULL_TAG and BURSTER_BREEDS[breed_data.name] and is_burster_forbidden(Unit_world_position(hit_unit, 1)) then
                 note_servo_reject("burster too close to player/teammate", hit_unit_priority)
+                burster_in_forbidden_zone = true
                 goto continue
             end
 
@@ -838,6 +842,13 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
 
         if best_unit ~= marked_unit then
             return best_unit, best_unit_tag, best_unit_breed_name, best_unit_priority, best_unit_band
+        end
+
+        -- With a burster in the danger zone the skull's own target selection is
+        -- what handles it; an unseeable mark elsewhere only occupies the
+        -- override slot without the skull being able to act on it.
+        if burster_in_forbidden_zone and mod_settings.servo_skull_no_los_disable_near_burster then
+            blocked_unit = nil
         end
 
         -- nothing visible: mark the best blocked target so the team still sees
@@ -938,7 +949,7 @@ function mod:can_focus_target_overwrite(target_unit, target_tag)
     return can_focus_target_overwrite(target_unit, target_tag)
 end
 
-function mod:is_noospheric_command_boost_breed_valid(target_unit)
+function mod:is_noospheric_command_boost_breed_valid(target_unit, is_manual)
     local unit_data_extension = ScriptUnit_extension(target_unit, "unit_data_system")
     local breed_data = unit_data_extension and unit_data_extension._breed
     if not breed_data then
@@ -950,7 +961,8 @@ function mod:is_noospheric_command_boost_breed_valid(target_unit)
     end
 
     local breed_name = breed_data.name
-    if BURSTER_BREEDS[breed_name] and is_burster_forbidden(Unit_world_position(target_unit, 1)) then
+    -- a manual ping is an explicit order and overrides the burster safety rule
+    if not is_manual and BURSTER_BREEDS[breed_name] and is_burster_forbidden(Unit_world_position(target_unit, 1)) then
         return false
     end
 

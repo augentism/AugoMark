@@ -239,6 +239,13 @@ local widgets = {
                 setting_id    = "servo_skull_mark_without_los",
                 type          = "checkbox",
                 default_value = false,
+                sub_widgets   = {
+                    {
+                        setting_id    = "servo_skull_no_los_disable_near_burster",
+                        type          = "checkbox",
+                        default_value = false,
+                    },
+                },
             },
             {
                 setting_id      = "medicae_assist_keybind",

@@ -39,6 +39,7 @@ local mod_settings = {
     servo_skull_mark_ignore_unaggroed        = mod:get("servo_skull_mark_ignore_unaggroed") or false,
     servo_skull_burster_forbidden_range      = mod:get("servo_skull_burster_forbidden_range") or 0,
     servo_skull_mark_without_los             = mod:get("servo_skull_mark_without_los") or false,
+    servo_skull_no_los_disable_near_burster  = mod:get("servo_skull_no_los_disable_near_burster") or false,
     medicae_snap_speed                       = mod:get("medicae_snap_speed") or 900,
     medicae_return_camera                    = mod:get("medicae_return_camera") or false,
     servo_skull_cancel_mark_time_threshold   = mod:get("servo_skull_cancel_mark_time_threshold") or 0,
@@ -603,7 +604,7 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     if not target_unit and mod_settings.noospheric_command_boost and context.has_noospheric_command and tag_name == TAG_NAMES.SERVO_SKULL_TAG and marked_tag and t >= tag_context.noospheric_command_next_time then
         local marked_unit = marked_tag._target_unit
-        local breed_ok = mod:is_noospheric_command_boost_breed_valid(marked_unit)
+        local breed_ok = mod:is_noospheric_command_boost_breed_valid(marked_unit, marked_tag_is_manual)
         local valid_ok = breed_ok and mod:is_target_valid(tag_name, nil, marked_unit)
         local visible_ok = valid_ok and mod:is_servo_skull_target_visible(marked_unit, fixed_frame)
         if visible_ok then
