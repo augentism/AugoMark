@@ -584,9 +584,9 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
 
     local target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los
     if class_settings.toggle_class and (class_settings.override_manual or not marked_tag_is_manual) then
-        if is_cooldown_ready then
-            target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, nil)
-        elseif is_priority_switch or is_execution_order_priority and marked_tag then
+        if is_cooldown_ready or is_priority_switch or is_execution_order_priority and marked_tag then
+            -- Keep the active mark as the priority baseline even when it is
+            -- outside the current aim scan (including when mark_limit is off).
             target_unit, target_tag, target_breed_name, target_priority, target_band, target_no_los = mod:find_target_unit_custom("auto", class_settings.min_range, class_settings.max_range, tag_name, tag_context, class_settings, true, is_execution_order_priority, marked_tag)
         end
     end
@@ -646,7 +646,9 @@ local function auto_mark_by_tag(tag_name, t, fixed_frame)
             "prio:", target_priority or "?", "band:", target_band or "-",
             target_no_los and "(no LOS - ping only until skull can see it)" or "")
     end
-    mod:mark(tag_name, target_unit, target_tag)
+    if not mod:mark(tag_name, target_unit, target_tag) then
+        return false
+    end
     -- set after mod:mark: the SmartTag init hook rebuilds the tag context
     tag_context.is_no_los = not not target_no_los
     return true

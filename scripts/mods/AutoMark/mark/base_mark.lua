@@ -86,12 +86,18 @@ function mod:mark(tag_name, target_unit, target_tag)
         or not tag_context
         or not smart_tag_system
     then
-        return
+        return false
+    end
+
+    -- Recheck at send time: the player may have turned since target selection.
+    -- Never cancel an existing tag for a replacement the server would reject.
+    if not mod:is_target_aim_valid(target_unit, false, true) then
+        return false
     end
 
     if target_tag then
         if tag_name == TAG_NAMES.ENEMY_TAG then
-            return
+            return false
         elseif tag_name == TAG_NAMES.COMPANION_TAG or tag_name == TAG_NAMES.VETERAN_TAG or tag_name == TAG_NAMES.SERVO_SKULL_TAG then
             local template = target_tag._template
             local is_enemy_mark = template and template.name == TAG_NAMES.ENEMY_TAG
@@ -108,6 +114,7 @@ function mod:mark(tag_name, target_unit, target_tag)
     -- set delay and interval for auto mark
     on_set_tag(tag_context)
     smart_tag_system:set_tag(tag_name, player_unit, target_unit)
+    return true
 end
 
 -- Check Manual Input Marked Target

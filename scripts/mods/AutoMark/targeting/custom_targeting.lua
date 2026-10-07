@@ -53,6 +53,183 @@ local INDEX_NORMAL                                     = 3
 local INDEX_ACTOR                                      = 4
 local COLLISION_FILTER                                 = "filter_player_ping_target_selection"
 local EMPTY_TABLE                                      = {}
+-- Keep automatic breed pings within SmartTagSystem's server-side view/aim check.
+local VIEW_CHECK_MIN_DISTANCE                          = 3
+local VIEW_CHECK_MIN_DOT                               = 0.75
+local AIM_CHECK_MAX_HITS                               = 64
+local AIM_CHECK_MIN_RADIUS                             = 1
+local AIM_CHECK_RADIUS_PER_METER                        = 0.052
+local aim_check_frame = nil
+local aim_check_results = {}
+local AIM_CANDIDATE_MAX_HITS                            = 256
+local AIM_CANDIDATE_MIN_RANGE                           = 110 -- covers the 100m class slider plus tall-target roots
+local AIM_NEAR_CANDIDATE_RADIUS                         = 10 -- server's <3m exemption uses flat XY distance
+local aim_candidate_frame = nil
+local aim_candidate_range = nil
+local aim_candidate_player_unit = nil
+local aim_candidate_physics_world = nil
+local aim_candidate_units = {}
+local aim_candidate_seen = {}
+local aim_near_units = {}
+local aim_candidate_saturated = false
+
+-- A sweep at the largest possible radius is a conservative superset of the
+-- server's target-specific sweep. Collect it once for all automatic tag types;
+-- the per-target check below remains authoritative when choosing a winner.
+function mod:aim_candidate_units(max_range, fixed_frame)
+    if GameParameters.testify then
+        return nil -- the server does not aim-check tags in test mode
+    end
+
+    local player = context.player
+    local player_unit = player and player.player_unit
+    local smart_targeting_extension = context.smart_targeting_extension
+    local physics_world = smart_targeting_extension and smart_targeting_extension._physics_world
+    local unit_data_extension = player_unit and ScriptUnit_has_extension(player_unit, "unit_data_system")
+    local first_person_component = unit_data_extension and unit_data_extension:read_component("first_person")
+    local first_person_extension = player_unit and ScriptUnit_has_extension(player_unit, "first_person_system")
+    local first_person_unit = first_person_extension and first_person_extension:first_person_unit()
+    local extension_manager = Managers.state.extension
+    local side_system = extension_manager and extension_manager:system("side_system")
+    local player_side = side_system and side_system.side_by_unit[player_unit]
+    local broadphase_system = extension_manager and extension_manager:system("broadphase_system")
+    local broadphase = broadphase_system and broadphase_system.broadphase
+    if not player_unit or not physics_world or not first_person_component or not first_person_unit
+        or not player_side or not broadphase then
+        return nil -- caller uses the original enemy list, matching the server's fallback
+    end
+    local forward = Quaternion.forward(first_person_component.rotation)
+    if Vector3_length(Vector3.flat(forward)) < 0.001 then
+        return nil -- the server also skips the aim check for a vertical look vector
+    end
+
+    local sweep_range = math_max(AIM_CANDIDATE_MIN_RANGE, max_range + 10)
+    if aim_candidate_frame == fixed_frame and aim_candidate_range >= sweep_range
+        and aim_candidate_player_unit == player_unit and aim_candidate_physics_world == physics_world then
+        return aim_candidate_saturated and nil or aim_candidate_units
+    end
+
+    aim_candidate_frame = fixed_frame
+    aim_candidate_range = sweep_range
+    aim_candidate_player_unit = player_unit
+    aim_candidate_physics_world = physics_world
+    aim_candidate_saturated = false
+    table.clear(aim_candidate_units)
+    table.clear(aim_candidate_seen)
+
+    local function collect(hits)
+        if hits and #hits >= AIM_CANDIDATE_MAX_HITS then
+            aim_candidate_saturated = true
+            return
+        end
+        for i = 1, hits and #hits or 0 do
+            local actor = hits[i].actor
+            local unit = actor and Actor_unit(actor)
+            if unit and not aim_candidate_seen[unit] and side_system:is_enemy(player_unit, unit) then
+                aim_candidate_seen[unit] = true
+                aim_candidate_units[#aim_candidate_units + 1] = unit
+            end
+        end
+    end
+
+    local eye_position = Unit_world_position(first_person_unit, 1)
+    local radius = math_max(AIM_CHECK_MIN_RADIUS, sweep_range * AIM_CHECK_RADIUS_PER_METER)
+    local to = eye_position + forward * (sweep_range + radius)
+    collect(PhysicsWorld.linear_sphere_sweep(physics_world, eye_position, to, radius,
+        AIM_CANDIDATE_MAX_HITS, "types", "both", "collision_filter", COLLISION_FILTER,
+        "report_initial_overlap", true))
+
+    -- The host skips view/aim checks at <3m, including enemies behind us.
+    -- Query that small exception around the player's root, not the level list.
+    if not aim_candidate_saturated then
+        table.clear(aim_near_units)
+        local near_count = broadphase.query(broadphase, Unit_world_position(player_unit, 1),
+            AIM_NEAR_CANDIDATE_RADIUS, aim_near_units, player_side:relation_side_names("enemy"))
+        for i = 1, near_count do
+            local unit = aim_near_units[i]
+            if not aim_candidate_seen[unit] then
+                aim_candidate_seen[unit] = true
+                aim_candidate_units[#aim_candidate_units + 1] = unit
+            end
+        end
+    end
+
+    return aim_candidate_saturated and nil or aim_candidate_units
+end
+
+function mod:is_target_aim_valid(target_unit, cone_only, force_sweep)
+    if GameParameters.testify or Unit.get_data(target_unit, "smart_tag_target_type") ~= "breed" then
+        return true
+    end
+
+    local player = context.player
+    local player_unit = player and player.player_unit
+    local unit_data_extension = player_unit and ScriptUnit_has_extension(player_unit, "unit_data_system")
+    local first_person_component = unit_data_extension and unit_data_extension:read_component("first_person")
+    if not first_person_component then
+        return true -- the server also skips the check without a first-person component
+    end
+
+    local to_target = Vector3.flat(Unit_world_position(target_unit, 1) - Unit_world_position(player_unit, 1))
+    local flat_distance = Vector3_length(to_target)
+    if flat_distance < VIEW_CHECK_MIN_DISTANCE then
+        return true
+    end
+
+    local forward = Vector3.flat(Quaternion.forward(first_person_component.rotation))
+    if Vector3_length(forward) >= 0.001
+        and Vector3_dot(Vector3_normalize(forward), Vector3_normalize(to_target)) < VIEW_CHECK_MIN_DOT then
+        return false
+    end
+    if cone_only then
+        return true
+    end
+
+    local smart_targeting_extension = context.smart_targeting_extension
+    local physics_world = smart_targeting_extension and smart_targeting_extension._physics_world
+    local first_person_extension = ScriptUnit_has_extension(player_unit, "first_person_system")
+    local first_person_unit = first_person_extension and first_person_extension:first_person_unit()
+    if not physics_world or not first_person_unit then
+        return true -- matches the server's missing-eye/physics fallback
+    end
+
+    -- All automatic tag types scan in the same fixed frame. Sweep each unit
+    -- once per frame; a final send bypasses this cache to catch camera turns.
+    local fixed_frame = smart_targeting_extension._latest_fixed_frame
+    if not force_sweep and fixed_frame then
+        if aim_check_frame ~= fixed_frame then
+            table.clear(aim_check_results)
+            aim_check_frame = fixed_frame
+        end
+        local cached = aim_check_results[target_unit]
+        if cached ~= nil then
+            return cached
+        end
+    end
+
+    local eye_position = Unit_world_position(first_person_unit, 1)
+    local distance = Vector3_distance(eye_position, Unit_world_position(target_unit, 1))
+    local radius = math_max(AIM_CHECK_MIN_RADIUS, distance * AIM_CHECK_RADIUS_PER_METER)
+    local aim_forward = Quaternion.forward(first_person_component.rotation)
+    local to = eye_position + aim_forward * (distance + radius)
+    local hits = PhysicsWorld.linear_sphere_sweep(physics_world, eye_position, to, radius,
+        AIM_CHECK_MAX_HITS, "types", "both", "collision_filter", COLLISION_FILTER,
+        "report_initial_overlap", true)
+
+    for i = 1, hits and #hits or 0 do
+        if Actor_unit(hits[i].actor) == target_unit then
+            if not force_sweep and fixed_frame then
+                aim_check_results[target_unit] = true
+            end
+            return true
+        end
+    end
+
+    if not force_sweep and fixed_frame then
+        aim_check_results[target_unit] = false
+    end
+    return false
+end
 
 local DARKNESS_LOS_MODIFIER_NAME                       = "mutator_darkness_los"
 local VENTILATION_PURGE_LOS_MODIFIER_NAME              = "mutator_ventilation_purge_los"
@@ -710,15 +887,18 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     end
     -- init best unit for switch logic
     local marked_unit = marked_tag and marked_tag._target_unit
+    if marked_unit and (not ALIVE[marked_unit] or not HEALTH_ALIVE[marked_unit]) then
+        marked_unit = nil
+    end
     if marked_unit then
         best_unit = marked_unit
         local unit_data_extension = ScriptUnit_extension(best_unit, "unit_data_system")
         local breed_data = unit_data_extension and unit_data_extension._breed
-        local marked_position = POSITION_LOOKUP[best_unit] or Unit_world_position(best_unit, 1)
-        local marked_distance = marked_position and Vector3_distance(marked_position, ray_origin)
+        local marked_position = Unit_world_position(best_unit, 1)
+        local marked_distance = Vector3_distance(marked_position, ray_origin)
         best_unit_priority = breed_data and get_breed_priority(best_unit, breed_data, breed_priorities, marked_distance, distance_threshold) or 0
         best_unit_marked_by_execution_order = not not execution_order_units[best_unit]
-        best_unit_distance = marked_distance or math.huge
+        best_unit_distance = marked_distance
         -- a marked burster that has since drifted inside the forbidden radius
         -- must lose to any other candidate so the scan can switch away from it
         -- (if nothing else is available, auto_cancel_servo_skull_mark drops it)
@@ -729,10 +909,14 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
     end
 
     if type == "auto" then
-        -- omnidirectional lookup: every alive enemy in range, regardless of where the player is aiming
-        local side_system = Managers.state.extension and Managers.state.extension:system("side_system")
-        local player_side = side_system and side_system:get_side_from_name("heroes")
-        local enemy_units = player_side and player_side:relation_units("enemy")
+        -- Start from aim-sweep hits instead of walking every enemy in the level.
+        -- A capped sweep can omit actors, so retain the full-list fallback.
+        local enemy_units = mod:aim_candidate_units(max_range, fixed_frame)
+        if not enemy_units then
+            local side_system = Managers.state.extension and Managers.state.extension:system("side_system")
+            local player_side = side_system and side_system:get_side_from_name("heroes")
+            enemy_units = player_side and player_side:relation_units("enemy")
+        end
         if not enemy_units then
             return nil
         end
@@ -756,6 +940,9 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             local distance = Vector3_distance(hit_unit_center_pos, ray_origin)
             -- filter unit by range
             if distance < min_range or distance > max_range then
+                goto continue
+            end
+            if not mod:is_target_aim_valid(hit_unit, true) then
                 goto continue
             end
 
@@ -798,6 +985,11 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
             -- filter unit by tag
             if not is_target_valid(tag_name, hit_unit_tag, hit_unit, hit_unit_center_pos, breed_data) then
                 note_servo_reject("tag validity (unaggroed / capacitance gate / existing mark)", hit_unit_priority)
+                goto continue
+            end
+
+            if not mod:is_target_aim_valid(hit_unit) then
+                note_servo_reject("outside server ping aim check", hit_unit_priority)
                 goto continue
             end
 
@@ -853,7 +1045,15 @@ function mod:find_target_unit_custom(type, min_range, max_range, tag_name, tag_c
 
         -- nothing visible: mark the best blocked target so the team still sees
         -- the ping and the skull opens fire as soon as it has line of sight
-        if blocked_unit and blocked_unit ~= marked_unit then
+        -- A blocked fallback must still beat a living incumbent; otherwise a
+        -- turn can replace a higher-priority mark with a lower-priority ping.
+        local blocked_has_execution_order = blocked_unit and not not execution_order_units[blocked_unit]
+        local blocked_beats_incumbent = not marked_unit
+            or (is_execution_order_priority and blocked_has_execution_order ~= best_unit_marked_by_execution_order
+                and blocked_has_execution_order)
+            or ((not is_execution_order_priority or blocked_has_execution_order == best_unit_marked_by_execution_order)
+                and blocked_priority and blocked_priority > best_unit_priority)
+        if blocked_unit and blocked_unit ~= marked_unit and blocked_beats_incumbent then
             return blocked_unit, blocked_tag, blocked_breed_name, blocked_priority, blocked_band, true
         end
 
